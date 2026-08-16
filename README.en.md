@@ -1,12 +1,16 @@
 # minapk
 
-[繁體中文](README.md)
+- [繁體中文讀我檔](README.md)
+- .
+- Wrap your Bun single-file executable into APK
 
-This is a Gradle-free Android APK build project. It uses command-line tools to
+- minapk is a Gradle-free Android APK build project. It uses command-line tools to
 process resources, compile Java, run R8/DEX, package, zipalign, and sign an APK,
 and embeds the [Buninu](https://www.npmjs.com/package/buninu) runtime in it.
 
-This project is derived from
+- Put `libmain.so` at the project root to make it run on startup (details below)
+
+- This project is derived from
 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
 ## 1. Change the app and APK name
