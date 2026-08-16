@@ -1,0 +1,4 @@
+-keep class **.MainActivity { *; }
+-keep class **.MainActivity$* { *; }
+-dontwarn **
+-allowaccessmodification

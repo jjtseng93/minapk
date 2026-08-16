@@ -1,0 +1,126 @@
+minapk third-party tools notice
+================================
+
+The MIT License in LICENSE applies to this project's original source code and
+documentation. It does not relicense the files under tools/. Those files remain
+under their respective upstream terms. Full relevant license texts are kept in
+LICENSES/ and, for R8's bundled dependencies, in LICENSES/R8-LICENSE.txt.
+
+Verified tool inventory
+-----------------------
+
+1. Android SDK Build Tools 34.0.0 (Google)
+
+   Official artifact:
+   https://dl.google.com/android/repository/build-tools_r34-windows.zip
+
+   The following local files are byte-for-byte identical to files extracted
+   from that official archive. This was verified with SHA-256.
+
+   tools/aapt2.exe
+     SHA-256: 4c7300d84054aa5e970323166cd078c88cf653110e15a30fbe9f8fe55a6857c0
+     Version: Build Tools 34.0.0 (the executable has no separate readable
+              product version; identity was established from the official
+              archive and its source.properties Pkg.Revision=34.0.0)
+
+   tools/zipalign.exe
+     SHA-256: 0876c4652cd53d794a89e091be400ecb03d47c5209a82253c17834fbbd17f8a0
+     Version: Build Tools 34.0.0 (identified as above)
+     Bundled zlib reports version 1.2.13.
+
+   tools/apksigner.jar
+     SHA-256: eefdd6aed9db9fb849e4c98a50d8741e19d1b674ba6547220bcb9c3ed152123a
+     Version output: 0.9
+
+   tools/d8.jar
+     SHA-256: d43c8a94c9b1f1da1a7cc49c32b81e8cee1708b37ee8b530a81a0688222b42c0
+     Version output: D8 8.2.2-dev
+     Upstream build commit: facedf41bbd28b563d1e9e09c5f72d7c5ca598d5
+
+   Primary licenses: Apache License 2.0 for Android/AOSP components; R8 is
+   BSD 3-Clause with bundled dependencies under the licenses enumerated in
+   LICENSES/R8-LICENSE.txt. See LICENSES/Apache-2.0.txt.
+
+2. Android SDK Platform 34, revision 3, extension level 7 (Google)
+
+   tools/android.jar
+     Official artifact:
+     https://dl.google.com/android/repository/platform-34-ext7_r03.zip
+     SHA-256: 6cea1df3efb77103ac3e2beb9bf4718964b0e0869ab16d39d29d5cbae1c147ad
+     The local file is byte-for-byte identical to android-34/android.jar in
+     that archive. Its API constants extend through API 34
+     (UPSIDE_DOWN_CAKE=34).
+
+   Android framework source is primarily Apache License 2.0. Google's
+   packaged SDK is additionally governed by the Android SDK License Agreement:
+   https://developer.android.com/studio/terms
+
+3. Eclipse Compiler for Java 3.45.0 (Eclipse Foundation)
+
+   tools/ecj-3.45.0.jar
+     Official Maven artifact:
+     https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.45.0/ecj-3.45.0.jar
+     SHA-256: c8f5e66787ea6e4e0394ba3051c86a4edc50683ce9850f71739646529a99a2d7
+     Version output: Eclipse Compiler for Java(TM) v20260224-0835, 3.45.0
+     Upstream tag: I20260224-0350
+     Upstream commit: c4f6f402f3100a8e3e073ca403403744adcf6a00
+     License: Eclipse Public License 2.0; see LICENSES/EPL-2.0.txt.
+
+Native runtime payload
+----------------------
+
+4. Bun for Android
+
+   libbun.so
+     Version output: 1.4.0
+     Revision output: 1.4.0-canary.1+41c3f6fdb
+     Source commit: 41c3f6fdb21822a716ce34adb526f002fd976825
+     Source: https://github.com/oven-sh/bun
+     SHA-256: 3014b52aa868019ab35560ad1a0134313676eb4012b625a2619b82d5295f09b6
+
+   Bun itself is MIT licensed. Bun statically links JavaScriptCore and WebKit
+   code under LGPL-2 terms and includes additional libraries under MIT,
+   Apache-2.0, BSD, zlib and other licenses. The authoritative upstream
+   component inventory and relinking instructions are reproduced in
+   LICENSES/Bun-LICENSE.md. The patched WebKit source is available from:
+   https://github.com/oven-sh/WebKit
+
+   Pinned WebKit/JavaScriptCore commit:
+   f0f60fd2324817dae9656d8bf2fcae25ceaccc37
+   Its exact COPYING.LIB is reproduced in
+   LICENSES/WebKit-JavaScriptCore-COPYING.LIB.
+
+   LGPL static-linking obligations, including providing a means to relink a
+   modified library, remain applicable. Merely labeling the combined binary as
+   MIT does not replace those obligations.
+
+5. musl dynamic linker/libc
+
+   libld-musl.so
+     SONAME: libc.musl-aarch64.so.1
+     Source: https://musl.libc.org/
+     SHA-256: da9c2d18642cf67ade0947b88b6859385c085fdbc6a022f5a8b518d7677e55df
+     License: MIT with additional permissive component notices reproduced in
+              LICENSES/musl-LICENSE.txt.
+
+6. Android shell loader
+
+   libsh-loader.so / libsh-loader.c
+     SHA-256 (binary): 59c0fc1547c1ea0f8fff6df92c38558df715dedacc7ccbbff2e2ad2953aa6b19
+     License: this project's MIT License in the root LICENSE file.
+
+Signing material
+----------------
+
+tools/debug.keystore is a signing-key container, not an executable tool, and
+does not have a software version or license identifier. It is intentionally
+excluded from the upstream artifact/license comparison. Private keystores
+should not be published unless their use as a public test key is deliberate.
+
+Verification method
+-------------------
+
+Versions were obtained from --version/-version output, JAR manifests and
+embedded version metadata. Artifact identity was then independently confirmed
+by extracting the official Google/Eclipse downloads and comparing SHA-256
+digests. A matching filename alone was not treated as proof of identity.

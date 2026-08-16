@@ -1,0 +1,9 @@
+
+*.apk
+
+no_backup
+
+buninu.tgz
+buninu.stamp
+
+libbun.so

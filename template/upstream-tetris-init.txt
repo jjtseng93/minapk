@@ -1,0 +1,51 @@
+Upstream TinyAPK Tetris initialization snippets
+================================================
+
+These snippets were removed from MainActivity.java because the Buninu WebView
+mode wrapped them in constant-false conditions, causing ECJ dead-code warnings.
+The Tetris implementation class `V` remains in MainActivity.java unchanged.
+
+0. MainActivity field
+---------------------
+
+Insert this field with the other MainActivity fields, before `webView`:
+
+    private V gameView;
+
+1. onCreate(Bundle b)
+---------------------
+
+Insert this block immediately after:
+
+    super.onCreate(b);
+
+It must be placed before the current WebView creation and `setContentView`.
+When restoring Tetris mode, remove or disable the WebView setup and
+`startBunProcess()` block so that its later `setContentView` does not replace
+the Tetris view.
+
+    requestWindowFeature(Window.FEATURE_NO_TITLE);
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    if (Build.VERSION.SDK_INT >= 30) {
+        getWindow().setDecorFitsSystemWindows(false);
+    }
+    gameView = new V(this);
+    setContentView(gameView);
+
+2. onPause()
+------------
+
+Insert immediately after `super.onPause();`:
+
+    if (gameView != null) gameView.pauseGame();
+
+3. onResume()
+-------------
+
+Insert immediately after `super.onResume();`:
+
+    if (gameView != null) gameView.resumeGame();
+
+These restored statements intentionally omit the old `if (false)` guards;
+adding those guards again would recreate the dead-code warnings.
