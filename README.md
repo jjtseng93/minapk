@@ -170,6 +170,13 @@ tools/debug.keystore
 
 預設 debug keystore 適合本地測試；正式發佈時應改用你自己的 release keystore，並妥善備份私鑰與密碼。
 
+## 未來規劃
+- 修復xterm終端機捲動問題
+- 加入Ctrl Alt Shift等按鍵
+- 一直包裝直到做到
+  * npx @drxiaozhi/minapk your_binary
+  * npx @drxiaozhi/minapk myapp.md
+
 ## License
 
 本專案依照 [MIT License](LICENSE) 發布。原始上游專案為 [tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。Android SDK、建置工具及其他第三方元件各自適用其原有授權；完整工具版本、來源與授權對照請見 [NOTICE](NOTICE) 及 [LICENSES](LICENSES/README.md)。

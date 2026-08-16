@@ -191,6 +191,13 @@ The default debug keystore is suitable for local testing. Use your own release
 keystore for production distribution, and securely back up its private key and
 passwords.
 
+## Roadmap
+- Fix xterm scrolling of jsgotty
+- Add Ctrl Alt Shift keys
+- Wrap until we reach
+  * npx @drxiaozhi/minapk your_binary
+  * npx @drxiaozhi/minapk myapp.md
+
 ## License
 
 This project is released under the [MIT License](LICENSE). Its original
