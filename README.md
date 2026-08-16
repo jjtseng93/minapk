@@ -1,7 +1,6 @@
 # minapk
 
 - [English Readme](README.en.md)
-- .
 - 把你的Bun單一可執行檔 包成APK
 
 - minapk 是一個不使用 Gradle 的 Android APK 建置專案，以命令列工具完成資源處理、Java 編譯、R8/DEX、APK 封裝、zipalign 與簽章，並將 [Buninu](https://www.npmjs.com/package/buninu) 執行環境放入 APK。
