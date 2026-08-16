@@ -76,6 +76,14 @@ The script uses POSIX shell syntax and can run on Android with:
 /system/bin/sh ./build.sh
 ```
 
+- `libmain.so`: Must be an Android Bun compiled /system/bin/linker64 executable (supported on Bun >= 1.4). Automatically runs at Android App startup. If the project root contains this file, the build packages it into the APK's native
+`lib/arm64-v8a` directory; when absent, it is skipped without an error.
+
+- Before packaging native libraries, if `libbun.so` is missing from the project
+root, `build.sh` runs `which bun` and copies the discovered Bun to
+`./libbun.so`. The build stops if Bun cannot be found or copied. That Bun must
+be executable on the target Android arm64 environment. 
+
 ## Update only the Buninu payload
 
 After at least one complete build has produced a root-level APK, run:
@@ -104,13 +112,6 @@ It can also be run explicitly with Android's system shell:
 ```sh
 /system/bin/sh ./repack.sh
 ```
-
-Before packaging native libraries, if `libbun.so` is missing from the project
-root, `build.sh` runs `which bun` and copies the discovered Bun to
-`./libbun.so`. The build stops if Bun cannot be found or copied. That Bun must
-be executable on the target Android arm64 environment. If the project root
-also contains `libmain.so`, the build packages it into the APK's native
-`lib/arm64-v8a` directory; when absent, it is skipped without an error.
 
 ## Buninu payload source
 

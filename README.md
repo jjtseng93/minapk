@@ -66,6 +66,13 @@ Hello2.apk
 /system/bin/sh ./build.sh
 ```
 
+- `libmain.so`: 必須是使用 Android Bun 編譯、以 /system/bin/linker64 為執行載入器的執行檔（Bun >= 1.4 支援）。Android App 啟動時會自動執行。如果專案根目錄包含此檔案，建置時會將它封裝到 APK 的原生 lib/arm64-v8a 目錄中；若不存在則會直接略過，不會報錯。
+
+- 封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，`build.sh` 會執行
+`which bun`，並將找到的 Bun 複製為根目錄的 `libbun.so`；找不到 Bun
+或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
+執行的版本。
+
 ## 只更新 Buninu payload
 
 完成至少一次完整建置並已有根目錄 APK 後，可以執行：
@@ -93,12 +100,6 @@ Hello2.apk → Hello2r.apk
 ```sh
 /system/bin/sh ./repack.sh
 ```
-
-封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，`build.sh` 會執行
-`which bun`，並將找到的 Bun 複製為根目錄的 `libbun.so`；找不到 Bun
-或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
-執行的版本。若根目錄另有 `libmain.so`，build 也會將它封裝進 APK 的
-`lib/arm64-v8a` 原生區；沒有此檔案時會直接略過，不會報錯。
 
 ## Buninu payload 來源
 
