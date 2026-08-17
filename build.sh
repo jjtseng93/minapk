@@ -189,6 +189,13 @@ for native_lib in libbun.so libsh-loader.so libld-musl.so libmain.so; do
 done
 (cd "$BUILD/native_libs" && zip -q -r -u "../apk_final/app-unsigned.apk" lib)
 
+progress 5c "Packaging license notices..."
+mkdir -p "$BUILD/licenses/assets/licenses"
+cp "$sd/LICENSE" "$BUILD/licenses/assets/licenses/LICENSE"
+cp "$sd/NOTICE" "$BUILD/licenses/assets/licenses/NOTICE"
+cp -r "$sd/LICENSES" "$BUILD/licenses/assets/licenses/LICENSES"
+(cd "$BUILD/licenses" && zip -q -r -u "../apk_final/app-unsigned.apk" assets/licenses)
+
 progress 6 "Zipalign..."
 "$ZIPALIGN" -f 4 "$BUILD/apk_final/app-unsigned.apk" "$BUILD/apk_final/app-aligned.apk"
 

@@ -71,7 +71,22 @@ Native runtime payload
 
 4. Bun for Android
 
-   libbun.so
+   libbun.so is not included in or distributed by this project. It is listed
+   in .gitignore and is never committed to this repository. build.sh only
+   copies a Bun binary that already exists on the machine running the build
+   (via `which bun`) to the project root as libbun.so; this project does not
+   fetch, build, or vendor Bun itself. Whoever runs build.sh is responsible
+   for the licensing of whichever Bun binary they supply.
+
+   The details below (version, commit, hash) describe one example build seen
+   during development. They identify which upstream Bun release that
+   particular binary was, and are reproduced here only to document Bun's own
+   license structure below (MIT core + statically linked LGPL-2 WebKit). They
+   are not a claim about, or a pin of, the Bun binary any given user's build
+   will actually contain — that depends entirely on the `bun` found on the
+   builder's PATH at build time.
+
+   Example libbun.so observed during development:
      Version output: 1.4.0
      Revision output: 1.4.0-canary.1+41c3f6fdb
      Source commit: 41c3f6fdb21822a716ce34adb526f002fd976825
@@ -85,10 +100,12 @@ Native runtime payload
    LICENSES/Bun-LICENSE.md. The patched WebKit source is available from:
    https://github.com/oven-sh/WebKit
 
-   Pinned WebKit/JavaScriptCore commit:
+   WebKit/JavaScriptCore commit pinned by the example build above:
    f0f60fd2324817dae9656d8bf2fcae25ceaccc37
    Its exact COPYING.LIB is reproduced in
-   LICENSES/WebKit-JavaScriptCore-COPYING.LIB.
+   LICENSES/WebKit-JavaScriptCore-COPYING.LIB. A different user-supplied Bun
+   binary may pin a different WebKit commit; LICENSES/WebKit-JavaScriptCore-COPYING.LIB
+   reflects only the example build's commit.
 
    LGPL static-linking obligations, including providing a means to relink a
    modified library, remain applicable. Merely labeling the combined binary as
