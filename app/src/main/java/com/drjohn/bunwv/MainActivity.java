@@ -31,6 +31,8 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private boolean urlLoaded = false;
+    private String lastExternalUrl;
+    private long lastExternalUrlAt;
 
     // ---- extra-keys control bar (Ctrl/Alt/Shift + IME receiver), ported from ../hello ----
     private static final int KEY_REPEAT_MS = 70;
@@ -53,7 +55,49 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            // Only intercepts navigations the WebView itself initiates (link taps,
+            // JS location changes, redirects) — not our own loadUrl() call that
+            // opens the terminal, so it can't hijack that on the way in.
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+
+                // window.open() (xterm.js's link handlers use it) has no
+                // WebChromeClient.onCreateWindow to host a new window, so
+                // Chromium treats it as a blocked popup and fires this
+                // callback a second time for its own internal sentinel URL,
+                // not a real navigation. Without this check we'd startActivity
+                // on "about:blank#blocked" too, which produces a second,
+                // unresolvable app-chooser prompt.
+                if ("about:blank#blocked".equals(url)) return true;
+
+                // A server-side redirect fires this callback again for the
+                // redirected-to URL. We already diverted the original tap to an
+                // external app below, so only act on the first (non-redirect)
+                // call -- otherwise the same tap launches a second app-chooser
+                // for the redirect target.
+                if (request.isRedirect()) return true;
+
+                // xterm.js (bundled in jsgotty) runs two independent link
+                // detectors -- WebLinksAddon (regex over plain text) and
+                // OscLinkProvider (OSC 8 hyperlink escapes) -- and either can
+                // call window.open() for a click. When a link matches both,
+                // one tap fires shouldOverrideUrlLoading twice for the exact
+                // same URL, opening two app-chooser prompts. Collapse repeats
+                // of the same URL within a short window into one.
+                long now = SystemClock.uptimeMillis();
+                if (url.equals(lastExternalUrl) && now - lastExternalUrlAt < 1000) return true;
+                lastExternalUrl = url;
+                lastExternalUrlAt = now;
+
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
+                } catch (Exception e) {
+                    return false; // no app can handle it; let the WebView try instead
+                }
+                return true;
+            }
+        });
 
         extraKeysBar = buildExtraKeysBar();
 
