@@ -6,13 +6,23 @@ import android.graphics.*;
 import android.media.*;
 import android.os.*;
 import android.system.Os;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.*;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.*;
+import android.widget.*;
 import java.io.*;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 public class MainActivity extends Activity {
 
@@ -22,6 +32,20 @@ public class MainActivity extends Activity {
     private WebView webView;
     private boolean urlLoaded = false;
 
+    // ---- extra-keys control bar (Ctrl/Alt/Shift + IME receiver), ported from ../hello ----
+    private static final int KEY_REPEAT_MS = 70;
+    private static final Set<String> NO_EXTRA_MODIFIERS = Collections.emptySet();
+    private static final Set<String> CTRL_MODIFIER = Collections.singleton("CTRL");
+
+    private FrameLayout extraKeysBar;
+    private EditText imeReceiver;
+    private Button ctrlButton;
+    private Button altButton;
+    private Button shiftButton;
+    private final Set<String> keyModifiers = new LinkedHashSet<>();
+    private final Handler keyRepeatHandler = new Handler(Looper.getMainLooper());
+    private Runnable keyRepeatRunnable;
+
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
 
@@ -29,9 +53,41 @@ public class MainActivity extends Activity {
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
         webView.setWebViewClient(new WebViewClient());
-        setContentView(webView);
+
+        extraKeysBar = buildExtraKeysBar();
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.addView(webView, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(extraKeysBar, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        setContentView(root);
 
         startBunProcess();
+    }
+
+    // Swallow volume-up and use it to toggle the extra-keys bar instead of
+    // changing the media volume. Volume-down is left untouched.
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) toggleExtraKeys();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    // Tapping the WebView while a modifier chord is armed clears it, so a
+    // stray CTRL/ALT/SHIFT toggle can't silently modify the next real tap.
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !keyModifiers.isEmpty() && webView != null) {
+            Rect bounds = new Rect();
+            if (webView.getGlobalVisibleRect(bounds) &&
+                bounds.contains((int) event.getRawX(), (int) event.getRawY())) {
+                clearKeyModifiers();
+            }
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     private void startBunProcess() {
@@ -426,6 +482,370 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+    }
+
+    // ------------------------------------------------ extra-keys control bar
+
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    private void toggleExtraKeys() {
+        boolean showing = extraKeysBar.getVisibility() != View.VISIBLE;
+        if (!showing) {
+            stopKeyRepeat();
+            imeReceiver.setText("");
+            keyModifiers.clear();
+            updateModifierButtonStyles();
+        }
+        extraKeysBar.setVisibility(showing ? View.VISIBLE : View.GONE);
+        if (!showing) focusWebView();
+    }
+
+    private void clearKeyModifiers() {
+        imeReceiver.setText("");
+        keyModifiers.clear();
+        updateModifierButtonStyles();
+    }
+
+    private void toggleKeyModifier(String modifier) {
+        if (!keyModifiers.add(modifier)) keyModifiers.remove(modifier);
+        updateModifierButtonStyles();
+        focusImeReceiver();
+    }
+
+    private void styleModifierButton(Button b, boolean selected) {
+        b.setBackgroundColor(selected ? 0xffffc107 : 0xff303030);
+        b.setTextColor(selected ? 0xff000000 : 0xffffffff);
+    }
+
+    private void updateModifierButtonStyles() {
+        styleModifierButton(ctrlButton, keyModifiers.contains("CTRL"));
+        styleModifierButton(altButton, keyModifiers.contains("ALT"));
+        styleModifierButton(shiftButton, keyModifiers.contains("SHIFT"));
+        imeReceiver.setHintTextColor(keyModifiers.isEmpty() ? 0x8affffff : 0xffffc107);
+    }
+
+    private void focusImeReceiver() {
+        imeReceiver.post(new Runnable() {
+            @Override public void run() {
+                imeReceiver.requestFocus();
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(imeReceiver, InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+    }
+
+    private boolean focusWebView() {
+        if (webView == null) return false;
+        webView.requestFocus();
+        webView.post(new Runnable() {
+            @Override public void run() {
+                webView.requestFocus();
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+        return true;
+    }
+
+    // Fires once immediately, then again every KEY_REPEAT_MS until stopKeyRepeat().
+    // Modifiers are snapshotted once at the start, matching a held chord like
+    // CTRL+held-arrow rather than re-reading (and re-clearing) state per tick.
+    private void startKeyRepeat(final int keyCode) {
+        stopKeyRepeat();
+        final List<String> modifiers = new ArrayList<>(keyModifiers);
+        keyModifiers.clear();
+        updateModifierButtonStyles();
+        sendWebKey(keyCode, modifiers);
+        keyRepeatRunnable = new Runnable() {
+            @Override public void run() {
+                sendWebKey(keyCode, modifiers);
+                keyRepeatHandler.postDelayed(this, KEY_REPEAT_MS);
+            }
+        };
+        keyRepeatHandler.postDelayed(keyRepeatRunnable, KEY_REPEAT_MS);
+    }
+
+    private void stopKeyRepeat() {
+        if (keyRepeatRunnable != null) {
+            keyRepeatHandler.removeCallbacks(keyRepeatRunnable);
+            keyRepeatRunnable = null;
+        }
+    }
+
+    // Termux-style one-shot modifiers: armed modifiers apply to the next key
+    // (here, plus any modifier baked into the button itself, e.g. CTRL for ^C)
+    // and are then cleared, so CTRL then C/F/V works without multi-touch.
+    private void sendNativeKey(int keyCode, Set<String> extraModifiers) {
+        List<String> modifiers = new ArrayList<>(keyModifiers);
+        for (String m : extraModifiers) if (!modifiers.contains(m)) modifiers.add(m);
+        keyModifiers.clear();
+        updateModifierButtonStyles();
+        sendWebKey(keyCode, modifiers);
+    }
+
+    private void sendImeText(String text) {
+        if (text.isEmpty()) return;
+        List<String> modifiers = new ArrayList<>(keyModifiers);
+        imeReceiver.setText("");
+        keyModifiers.clear();
+        updateModifierButtonStyles();
+        sendWebTextKeys(text, modifiers);
+    }
+
+    /**
+     * Deliver a real Android keyboard event sequence to the WebView. This
+     * deliberately does not run JavaScript or construct a DOM KeyboardEvent:
+     * Chromium receives native KeyEvents and creates the DOM events itself, so
+     * event.isTrusted stays true.
+     */
+    private boolean sendWebKey(int keyCode, List<String> modifiers) {
+        return sendWebKey(keyCode, modifiers, 0);
+    }
+
+    private boolean sendWebKey(int keyCode, List<String> modifiers, int generatedMetaState) {
+        if (webView == null) return false;
+        webView.requestFocus();
+
+        int meta = generatedMetaState;
+        List<Integer> modifierCodes = new ArrayList<>();
+        if (containsIgnoreCase(modifiers, "CTRL")) {
+            modifierCodes.add(KeyEvent.KEYCODE_CTRL_LEFT);
+            meta |= KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+        }
+        if (containsIgnoreCase(modifiers, "ALT")) {
+            modifierCodes.add(KeyEvent.KEYCODE_ALT_LEFT);
+            meta |= KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON;
+        }
+        if (containsIgnoreCase(modifiers, "SHIFT")) {
+            modifierCodes.add(KeyEvent.KEYCODE_SHIFT_LEFT);
+            meta |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
+        }
+        meta = KeyEvent.normalizeMetaState(meta);
+
+        long downTime = SystemClock.uptimeMillis();
+        for (int code : modifierCodes) {
+            webView.dispatchKeyEvent(makeKeyEvent(KeyEvent.ACTION_DOWN, code, meta, downTime));
+        }
+        webView.dispatchKeyEvent(makeKeyEvent(KeyEvent.ACTION_DOWN, keyCode, meta, downTime));
+        webView.dispatchKeyEvent(makeKeyEvent(KeyEvent.ACTION_UP, keyCode, meta, downTime));
+        for (int i = modifierCodes.size() - 1; i >= 0; i--) {
+            webView.dispatchKeyEvent(makeKeyEvent(KeyEvent.ACTION_UP, modifierCodes.get(i), meta, downTime));
+        }
+        // The IME receiver may hold input focus while capturing a chord; give
+        // focus straight back to the WebView and keep the soft keyboard up.
+        focusWebView();
+        return true;
+    }
+
+    private KeyEvent makeKeyEvent(int action, int code, int meta, long downTime) {
+        return new KeyEvent(
+            downTime,
+            SystemClock.uptimeMillis(),
+            action,
+            code,
+            0,
+            meta,
+            KeyCharacterMap.VIRTUAL_KEYBOARD,
+            0,
+            KeyEvent.FLAG_SOFT_KEYBOARD | KeyEvent.FLAG_KEEP_TOUCH_MODE,
+            InputDevice.SOURCE_KEYBOARD);
+    }
+
+    private boolean containsIgnoreCase(List<String> list, String value) {
+        for (String s : list) if (s.equalsIgnoreCase(value)) return true;
+        return false;
+    }
+
+    // Converts typed/IME text into native key events via the same character
+    // map Android uses for a virtual keyboard, so punctuation and uppercase
+    // letters reproduce the Shift/Alt state that generated them.
+    private boolean sendWebTextKeys(String text, List<String> modifiers) {
+        KeyCharacterMap keyMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD);
+        boolean sentAny = false;
+        int i = 0;
+        while (i < text.length()) {
+            int codePoint = text.codePointAt(i);
+            i += Character.charCount(codePoint);
+            char[] chars = Character.toChars(codePoint);
+            KeyEvent[] events = keyMap.getEvents(chars);
+            if (events == null) continue;
+            KeyEvent generated = null;
+            for (KeyEvent e : events) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN && !KeyEvent.isModifierKey(e.getKeyCode())) {
+                    generated = e;
+                    break;
+                }
+            }
+            if (generated == null) continue;
+            sentAny = sendWebKey(generated.getKeyCode(), modifiers, generated.getMetaState()) || sentAny;
+        }
+        return sentAny;
+    }
+
+    // ------------------------------------------------ extra-keys UI (views only)
+
+    private Button makeModifierButton(String label, final String modifier) {
+        Button btn = new Button(this);
+        btn.setText(label);
+        btn.setTextSize(12);
+        btn.setAllCaps(false);
+        btn.setPadding(dp(12), 0, dp(12), 0);
+        btn.setMinWidth(dp(48));
+        btn.setMinHeight(dp(34));
+        styleModifierButton(btn, false);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { toggleKeyModifier(modifier); }
+        });
+        return btn;
+    }
+
+    private Button makeKeyButton(String label, final Runnable onPress, final Runnable onLongPress) {
+        final Button btn = new Button(this);
+        btn.setText(label);
+        btn.setTextSize(12);
+        btn.setAllCaps(false);
+        btn.setBackgroundColor(0xff303030);
+        btn.setTextColor(0xffffffff);
+        btn.setPadding(dp(12), 0, dp(12), 0);
+        btn.setMinWidth(dp(48));
+        btn.setMinHeight(dp(34));
+        if (onPress != null) {
+            btn.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { onPress.run(); }
+            });
+        }
+        if (onLongPress != null) {
+            btn.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override public boolean onLongClick(View v) { onLongPress.run(); return true; }
+            });
+        }
+        // Key-repeat buttons arm a Handler loop on long-press; release anywhere
+        // on the button (up or cancel) must stop it, independent of click/long-click.
+        btn.setOnTouchListener(new View.OnTouchListener() {
+            @Override public boolean onTouch(View v, MotionEvent event) {
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    stopKeyRepeat();
+                }
+                return false;
+            }
+        });
+        return btn;
+    }
+
+    private Button makeRepeatButton(String label, final int keyCode) {
+        return makeKeyButton(
+            label,
+            new Runnable() { @Override public void run() { sendNativeKey(keyCode, NO_EXTRA_MODIFIERS); } },
+            new Runnable() { @Override public void run() { startKeyRepeat(keyCode); } });
+    }
+
+    private void addSpaced(LinearLayout row, View... views) {
+        for (int i = 0; i < views.length; i++) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, dp(34));
+            if (i > 0) lp.leftMargin = dp(2);
+            row.addView(views[i], lp);
+        }
+    }
+
+    private HorizontalScrollView wrapScroll(LinearLayout row) {
+        HorizontalScrollView sv = new HorizontalScrollView(this);
+        sv.setHorizontalScrollBarEnabled(false);
+        sv.addView(row, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
+        return sv;
+    }
+
+    private EditText makeImeReceiver() {
+        EditText et = new EditText(this);
+        et.setGravity(Gravity.CENTER);
+        et.setTextColor(0xffffffff);
+        et.setTextSize(9);
+        et.setSingleLine(true);
+        et.setHint("│");
+        et.setHintTextColor(0x8affffff);
+        et.setPadding(0, 0, 0, 0);
+        et.setBackgroundColor(0xff242424);
+        et.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        et.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int c, int d) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) { sendImeText(s.toString()); }
+        });
+        return et;
+    }
+
+    private FrameLayout buildExtraKeysBar() {
+        ctrlButton = makeModifierButton("CTRL", "CTRL");
+        altButton = makeModifierButton("ALT", "ALT");
+        shiftButton = makeModifierButton("SHFT", "SHIFT");
+
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setPadding(dp(2), dp(1), dp(34), dp(1));
+        addSpaced(row1,
+            makeKeyButton("ESC",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_ESCAPE, NO_EXTRA_MODIFIERS); } },
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_Q, CTRL_MODIFIER); } }),
+            shiftButton,
+            makeKeyButton("^C x",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_C, CTRL_MODIFIER); } },
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_X, CTRL_MODIFIER); } }),
+            makeKeyButton("HOME",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_MOVE_HOME, NO_EXTRA_MODIFIERS); } },
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_U, CTRL_MODIFIER); } }),
+            makeRepeatButton("↑", KeyEvent.KEYCODE_DPAD_UP),
+            makeKeyButton("END",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_MOVE_END, NO_EXTRA_MODIFIERS); } },
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_K, CTRL_MODIFIER); } }),
+            makeKeyButton("PGU",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_PAGE_UP, NO_EXTRA_MODIFIERS); } },
+                null));
+
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+        row2.setPadding(dp(2), dp(1), dp(56), dp(1));
+        addSpaced(row2,
+            makeKeyButton("TAB",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_TAB, NO_EXTRA_MODIFIERS); } },
+                null),
+            ctrlButton,
+            altButton,
+            makeRepeatButton("←", KeyEvent.KEYCODE_DPAD_LEFT),
+            makeRepeatButton("↓", KeyEvent.KEYCODE_DPAD_DOWN),
+            makeRepeatButton("→", KeyEvent.KEYCODE_DPAD_RIGHT),
+            makeKeyButton("PGD",
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_PAGE_DOWN, NO_EXTRA_MODIFIERS); } },
+                null));
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.addView(wrapScroll(row1));
+        column.addView(wrapScroll(row2));
+
+        imeReceiver = makeImeReceiver();
+        FrameLayout.LayoutParams imeParams = new FrameLayout.LayoutParams(dp(30), dp(34));
+        imeParams.gravity = Gravity.TOP | Gravity.END;
+        imeParams.setMargins(0, dp(1), dp(2), 0);
+
+        Button enterButton = makeKeyButton("ENTER",
+            new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_ENTER, NO_EXTRA_MODIFIERS); } },
+            new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_FORWARD_DEL, NO_EXTRA_MODIFIERS); } });
+        FrameLayout.LayoutParams enterParams = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT);
+        enterParams.gravity = Gravity.BOTTOM | Gravity.END;
+        enterParams.setMargins(0, 0, dp(2), dp(1));
+
+        FrameLayout bar = new FrameLayout(this);
+        bar.setBackgroundColor(0xff181818);
+        bar.addView(column, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        bar.addView(imeReceiver, imeParams);
+        bar.addView(enterButton, enterParams);
+        return bar;
     }
 
     static class V extends SurfaceView implements SurfaceHolder.Callback {
