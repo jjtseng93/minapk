@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
     private static final int KEY_REPEAT_MS = 70;
     private static final Set<String> NO_EXTRA_MODIFIERS = Collections.emptySet();
     private static final Set<String> CTRL_MODIFIER = Collections.singleton("CTRL");
+    private static final Set<String> SHIFT_MODIFIER = Collections.singleton("SHIFT");
 
     private FrameLayout extraKeysBar;
     private EditText imeReceiver;
@@ -574,6 +575,48 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Same periodic-trigger shape as startKeyRepeat, but dispatches a mouse
+    // wheel tick instead of a key each time. Shares stopKeyRepeat() since it
+    // only ever cancels whatever runnable is currently armed.
+    private void startScrollRepeat(final float vscroll) {
+        stopKeyRepeat();
+        dispatchScroll(vscroll);
+        keyRepeatRunnable = new Runnable() {
+            @Override public void run() {
+                dispatchScroll(vscroll);
+                keyRepeatHandler.postDelayed(this, KEY_REPEAT_MS);
+            }
+        };
+        keyRepeatHandler.postDelayed(keyRepeatRunnable, KEY_REPEAT_MS);
+    }
+
+    // Synthesizes one mouse-wheel notch (ACTION_SCROLL / AXIS_VSCROLL) so
+    // Chromium generates a real wheel event — this is what lets xterm.js (and
+    // anything else that only listens for wheel, not PageUp/PageDown) scroll
+    // its own buffer. Positive vscroll scrolls up (reveals earlier content),
+    // matching AXIS_VSCROLL's convention (and RecyclerView's use of it).
+    private void dispatchScroll(float vscroll) {
+        if (webView == null || webView.getWidth() == 0 || webView.getHeight() == 0) return;
+
+        MotionEvent.PointerProperties[] props = new MotionEvent.PointerProperties[1];
+        props[0] = new MotionEvent.PointerProperties();
+        props[0].id = 0;
+        props[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+
+        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
+        coords[0] = new MotionEvent.PointerCoords();
+        coords[0].x = webView.getWidth() / 2f;
+        coords[0].y = webView.getHeight() / 2f;
+        coords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, vscroll);
+
+        long now = SystemClock.uptimeMillis();
+        MotionEvent event = MotionEvent.obtain(
+            now, now, MotionEvent.ACTION_SCROLL, 1, props, coords,
+            0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
+        webView.dispatchGenericMotionEvent(event);
+        event.recycle();
+    }
+
     // Termux-style one-shot modifiers: armed modifiers apply to the next key
     // (here, plus any modifier baked into the button itself, e.g. CTRL for ^C)
     // and are then cleared, so CTRL then C/F/V works without multi-touch.
@@ -803,7 +846,7 @@ public class MainActivity extends Activity {
                 new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_K, CTRL_MODIFIER); } }),
             makeKeyButton("PGU",
                 new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_PAGE_UP, NO_EXTRA_MODIFIERS); } },
-                null));
+                new Runnable() { @Override public void run() { startScrollRepeat(1f); } }));
 
         LinearLayout row2 = new LinearLayout(this);
         row2.setOrientation(LinearLayout.HORIZONTAL);
@@ -811,7 +854,7 @@ public class MainActivity extends Activity {
         addSpaced(row2,
             makeKeyButton("TAB",
                 new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_TAB, NO_EXTRA_MODIFIERS); } },
-                null),
+                new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_TAB, SHIFT_MODIFIER); } }),
             ctrlButton,
             altButton,
             makeRepeatButton("←", KeyEvent.KEYCODE_DPAD_LEFT),
@@ -819,7 +862,7 @@ public class MainActivity extends Activity {
             makeRepeatButton("→", KeyEvent.KEYCODE_DPAD_RIGHT),
             makeKeyButton("PGD",
                 new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_PAGE_DOWN, NO_EXTRA_MODIFIERS); } },
-                null));
+                new Runnable() { @Override public void run() { startScrollRepeat(-1f); } }));
 
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
@@ -831,7 +874,7 @@ public class MainActivity extends Activity {
         imeParams.gravity = Gravity.TOP | Gravity.END;
         imeParams.setMargins(0, dp(1), dp(2), 0);
 
-        Button enterButton = makeKeyButton("ENTER",
+        Button enterButton = makeKeyButton("Ent",
             new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_ENTER, NO_EXTRA_MODIFIERS); } },
             new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_FORWARD_DEL, NO_EXTRA_MODIFIERS); } });
         FrameLayout.LayoutParams enterParams = new FrameLayout.LayoutParams(
