@@ -104,7 +104,6 @@ public class MainActivity extends Activity {
                     String line;
 
                     while ((line = reader.readLine()) != null) {
-                        Log.d("BunStdout", line);
                         if (!urlLoaded && (line.contains("http://") || line.contains("https://"))) {
                             urlLoaded = true;
                             final String targetUrl = extractUrl(line);
