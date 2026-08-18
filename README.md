@@ -47,7 +47,7 @@ npx @drxiaozhi/minapk [/path/to/your.elf]
 
 這是主要入口，整個流程都由 `index.js` 驅動：
 
-1. 若有帶 elf 路徑，把它複製成專案根目錄的 `libmain.so`（自動加上可執行權限）。
+1. 若有帶 elf 路徑，這次建置就用它當 `libmain.so` 打包（不會寫入專案根目錄，只影響這一次；不帶 elf 時使用專案根目錄現有的 `libmain.so`，見下方說明）。
 2. 準備 Buninu payload 與 manifest/資源/Java 原始碼，用 aapt2、ECJ、R8 編譯，封裝 Buninu payload 與原生函式庫，執行 zipalign，並用 `tools/debug.keystore` 簽章（不存在時自動建立），輸出到專案根目錄的 `<appname>.apk`（例如目前設定會是 `Hello2.apk`）。
 3. build 成功且有帶 elf 時，把輸出的 APK 複製一份到 elf 原本所在的目錄，檔名是 elf 本身的檔名（去掉副檔名，若原本就沒有副檔名也一樣正確處理）加上 `.apk`。例如 `myapp.elf` 旁邊會多一個 `myapp.apk`。
 

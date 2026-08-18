@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { chmodSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, extname, isAbsolute, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
@@ -49,14 +49,16 @@ function parseArguments(argv) {
   return result;
 }
 
-async function copyElfAsLibmain(elfArgument) {
+// Only validates and resolves the path -- never written into the project
+// root's libmain.so. build.sh reads MINAPK_LIBMAIN as an override for this
+// run only (same reasoning as MINAPK_APPNAME/MINAPK_PKGNAME below): writing
+// the elf into libmain.so would leave it there permanently, so a later run
+// without an elf argument would silently keep packaging it. It would also
+// clobber the project's own pre-existing manually-placed libmain.so, which
+// is a legitimate persistent setup on its own (see the README's top note).
+function resolveElfPath(elfArgument) {
   const elfPath = isAbsolute(elfArgument) ? elfArgument : resolve(process.cwd(), elfArgument);
   if (!existsSync(elfPath)) fail(`elf not found: ${elfPath}`);
-
-  const destination = resolve(rootDir, "libmain.so");
-  await Bun.write(destination, Bun.file(elfPath));
-  chmodSync(destination, 0o755);
-  console.error(`minapk: copied ${elfPath} -> ${destination}`);
   return elfPath;
 }
 
@@ -204,7 +206,7 @@ async function applyPackagePatch(tgzPath, { configPath, command }) {
 }
 
 const { elf: elfArgument, configPath, command, appName, pkgName } = parseArguments(process.argv.slice(2));
-const elfPath = elfArgument ? await copyElfAsLibmain(elfArgument) : null;
+const elfPath = elfArgument ? resolveElfPath(elfArgument) : null;
 
 const buildScript = resolve(rootDir, "build.sh");
 if (!existsSync(buildScript)) fail(`build script not found: ${buildScript}`);
@@ -216,14 +218,16 @@ if (configPath || command !== null) {
   buildArguments.push(tgzPath);
 }
 
-// -n/-p are passed as env vars instead of being written into appname.txt/
-// pkgname.txt: build.sh reads MINAPK_APPNAME/MINAPK_PKGNAME as overrides for
-// this run only. Never mutating those checked-in files means a plain run
-// without -n/-p always builds from the same predictable defaults, regardless
-// of what any earlier invocation passed.
+// -n/-p/elf are passed as env vars instead of being written into
+// appname.txt/pkgname.txt/libmain.so: build.sh reads MINAPK_APPNAME/
+// MINAPK_PKGNAME/MINAPK_LIBMAIN as overrides for this run only. Never
+// mutating those checked-in files means a plain run without -n/-p/elf always
+// builds from the same predictable defaults, regardless of what any earlier
+// invocation passed.
 const childEnvironment = { ...process.env };
 if (appName) childEnvironment.MINAPK_APPNAME = appName;
 if (pkgName) childEnvironment.MINAPK_PKGNAME = pkgName;
+if (elfPath) childEnvironment.MINAPK_LIBMAIN = elfPath;
 
 const child = Bun.spawn(["/bin/sh", buildScript, ...buildArguments], {
   cwd: rootDir,

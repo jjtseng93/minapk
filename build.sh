@@ -204,11 +204,22 @@ fi
 
 progress 5b "Packaging native libraries..."
 mkdir -p "$BUILD/native_libs/lib/arm64-v8a"
-for native_lib in libbun.so libsh-loader.so libld-musl.so libmain.so; do
+for native_lib in libbun.so libsh-loader.so libld-musl.so; do
   if [ -f "$sd/$native_lib" ]; then
     cp "$sd/$native_lib" "$BUILD/native_libs/lib/arm64-v8a/$native_lib"
+    chmod 755 "$BUILD/native_libs/lib/arm64-v8a/$native_lib"
   fi
 done
+# MINAPK_LIBMAIN (set by index.js's elf argument) overrides the checked-in
+# libmain.so for this run only, the same way MINAPK_APPNAME/MINAPK_PKGNAME
+# override appname.txt/pkgname.txt: the file on disk is never written to, so
+# a run without an elf argument always packages whatever libmain.so (if any)
+# is already sitting in the project root, not a leftover from an earlier run.
+libmain_src=${MINAPK_LIBMAIN:-$sd/libmain.so}
+if [ -f "$libmain_src" ]; then
+  cp "$libmain_src" "$BUILD/native_libs/lib/arm64-v8a/libmain.so"
+  chmod 755 "$BUILD/native_libs/lib/arm64-v8a/libmain.so"
+fi
 (cd "$BUILD/native_libs" && zip -q -r -u "../apk_final/app-unsigned.apk" lib)
 
 progress 5c "Packaging license notices..."

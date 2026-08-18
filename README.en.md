@@ -55,8 +55,9 @@ npx @drxiaozhi/minapk [/path/to/your.elf]
 
 This is the main entry point; the whole process is driven by `index.js`:
 
-1. If an elf path is given, copy it to the project root as `libmain.so`
-   (marked executable automatically).
+1. If an elf path is given, this build packages it as `libmain.so` (never
+   written to the project root, only affecting this one run; without an elf,
+   the project root's existing `libmain.so`, if any, is used -- see below).
 2. Prepare the Buninu payload and the manifest/resources/Java source, compile
    with aapt2, ECJ, and R8, package the Buninu payload and native libraries,
    run zipalign, and sign with `tools/debug.keystore` (created automatically
