@@ -7,6 +7,8 @@ import android.media.*;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.*;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.system.Os;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -26,7 +28,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.*;
 
 public class MainActivity extends Activity {
@@ -38,6 +43,21 @@ public class MainActivity extends Activity {
     private boolean urlLoaded = false;
     private String lastExternalUrl;
     private long lastExternalUrlAt;
+
+    // ---- native-bridge: speak/ttsStatus ----
+    // speak() never blocks the caller: TextToSpeech's own completion signal
+    // (UtteranceProgressListener) is asynchronous, so the far side is
+    // expected to poll ttsStatus(handle) itself rather than have this
+    // connection-handling thread sit blocked for however long the utterance
+    // takes to finish (unlike toast/clipboard, whose underlying Android calls
+    // return immediately). ttsStatusMap is keyed by a per-call handle rather
+    // than one global flag so concurrent speak() calls cannot clobber each
+    // other's status.
+    private TextToSpeech ttsEngine;
+    private volatile boolean ttsReady = false;
+    private final Object ttsInitLock = new Object();
+    private final Map<String, String> ttsStatusMap = new ConcurrentHashMap<>();
+    private final AtomicLong ttsHandleCounter = new AtomicLong();
 
     // ---- extra-keys control bar (Ctrl/Alt/Shift + IME receiver), ported from ../hello ----
     private static final int KEY_REPEAT_MS = 70;
@@ -397,7 +417,10 @@ public class MainActivity extends Activity {
     // access both require the main looper (Toast.show() needs one to attach
     // its view to; ClipboardManager is likewise only reliably usable from the
     // main thread), so both run through runOnMainThreadSync rather than
-    // directly on this per-connection thread.
+    // directly on this per-connection thread. speak() also hops to the main
+    // thread this same way, but only to issue the speak() call itself --
+    // unlike toast/clipboard, it does not wait for the underlying work
+    // (actually finishing the utterance) to complete; see ttsStatus below.
     private String dispatchNativeBridgeRequest(String body) throws Exception {
         JSONArray request = new JSONArray(body);
         String func = request.optString(0, "");
@@ -406,9 +429,11 @@ public class MainActivity extends Activity {
         final JSONArray finalArgv = argv;
 
         if (func.equals("_discover")) {
-            return "{\"toast\":[],"
+            return "{\"toast\":[\"text\",\"long\"],"
                 + "\"clipboardRead\":[],\"getcb\":[],"
-                + "\"clipboardWrite\":[],\"setcb\":[]}";
+                + "\"clipboardWrite\":[\"text\"],\"setcb\":[\"text\"],"
+                + "\"speak\":[\"text\",\"speed\",\"pitch\",\"flush\"],"
+                + "\"ttsStatus\":[\"handle\"],\"tts\":[\"handle\"]}";
         }
 
         if (func.equals("toast")) {
@@ -453,7 +478,88 @@ public class MainActivity extends Activity {
             return "true";
         }
 
+        if (func.equals("speak")) {
+            ensureTtsReady();
+            // Only text is required; speed/pitch/flush all default. 1.0 is
+            // normal for both speed and pitch, same convention as
+            // termux-tts-speak's -p/-r and jsmdcui's own TTS_PITCH/TTS_SPEED
+            // env vars -- values pass straight through with no unit
+            // conversion.
+            final String text = finalArgv.optString(0, "");
+            final float speed = (float) finalArgv.optDouble(1, 1.0);
+            final float pitch = (float) finalArgv.optDouble(2, 1.0);
+            final boolean flush = finalArgv.optBoolean(3, false);
+            final String handle = "u" + ttsHandleCounter.incrementAndGet();
+            ttsStatusMap.put(handle, "speaking");
+            runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    ttsEngine.setPitch(pitch);
+                    ttsEngine.setSpeechRate(speed);
+                    ttsEngine.speak(text,
+                        flush ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD,
+                        new Bundle(), handle);
+                    return null;
+                }
+            });
+            return JSONObject.quote(handle);
+        }
+
+        if (func.equals("ttsStatus") || func.equals("tts")) {
+            final String handle = finalArgv.optString(0, "");
+            String status = ttsStatusMap.get(handle);
+            if (status == null) return JSONObject.quote("unknown");
+            // Consume-once: once the caller has seen a terminal state, drop
+            // the entry so ttsStatusMap does not grow without bound over the
+            // life of the app. A second poll of the same handle after this
+            // point correctly reports "unknown", not a stale "done".
+            if (status.equals("done") || status.equals("error")) ttsStatusMap.remove(handle);
+            return JSONObject.quote(status);
+        }
+
         return JSONObject.quote("Unknown func 未知函式: " + func + "\r\n" + finalArgv.toString());
+    }
+
+    // Lazily creates the TextToSpeech engine and blocks (with a bounded
+    // timeout, unlike a naive latch.await() with none) until either
+    // OnInitListener.onInit() fires or that timeout elapses. This blocking
+    // wait only ever happens once per app process, on whichever speak() call
+    // gets here first; every later speak() sees ttsReady already true and
+    // returns immediately.
+    private void ensureTtsReady() throws Exception {
+        synchronized (ttsInitLock) {
+            if (ttsReady) return;
+
+            final CountDownLatch initLatch = new CountDownLatch(1);
+            runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    ttsEngine = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
+                        @Override public void onInit(int status) {
+                            ttsReady = (status == TextToSpeech.SUCCESS);
+                            initLatch.countDown();
+                        }
+                    });
+                    ttsEngine.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override public void onStart(String utteranceId) {
+                            ttsStatusMap.put(utteranceId, "speaking");
+                        }
+                        @Override public void onDone(String utteranceId) {
+                            ttsStatusMap.put(utteranceId, "done");
+                        }
+                        @Override public void onError(String utteranceId) {
+                            ttsStatusMap.put(utteranceId, "error");
+                        }
+                    });
+                    return null;
+                }
+            });
+
+            if (!initLatch.await(10, TimeUnit.SECONDS)) {
+                throw new Exception("native-bridge: TTS engine init timed out");
+            }
+            if (!ttsReady) {
+                throw new Exception("native-bridge: TTS engine failed to initialize");
+            }
+        }
     }
 
     // Runs task on the main looper and blocks the calling (background) thread
