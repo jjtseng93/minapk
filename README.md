@@ -9,6 +9,22 @@
 
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
+## 0. 安裝依賴
+
+### Termux
+
+```sh
+pkg install aapt aapt2 zip openjdk-21 nodejs npm
+npm install -g bun
+```
+
+### Debian / Ubuntu（apt）
+
+```sh
+sudo apt install aapt zipalign zip openjdk-21-jdk-headless nodejs npm
+curl -fsSL https://bun.sh/install | bash
+```
+
 ## 1. 應用程式名稱與 APK 名稱
 
 ```sh
@@ -44,6 +60,14 @@ npx @drxiaozhi/minapk -p com.drjohn.bunwv
 ```sh
 npx @drxiaozhi/minapk [/path/to/your.elf]
 ```
+
+> [!NOTE]
+> 用 `npx` 執行（不是本地 checkout）時，第一次建置實測會依序遇到最多 3 次確認提示，全部輸入 `y`（或 `Y`）即可，這是正常流程：
+> 1. `npx` 詢問是否安裝 `@drxiaozhi/minapk` 本身。
+> 2. 找不到本地 `no_backup`（npm 上發佈的套件本來就不含它）時，`build.sh` 詢問是否執行 `npx buninu@latest --export`。
+> 3. 上一步的 `npx` 詢問是否安裝 `buninu`。
+>
+> 因為每次 `npx` 都是全新的暫存環境，第 2、3 步幾乎每次執行都會再問一次。
 
 這是主要入口，整個流程都由 `index.js` 驅動：
 

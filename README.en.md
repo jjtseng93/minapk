@@ -9,6 +9,22 @@
 
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
+## 0. Install dependencies
+
+### Termux
+
+```sh
+pkg install aapt aapt2 zip openjdk-21 nodejs npm
+npm install -g bun
+```
+
+### Debian / Ubuntu (apt)
+
+```sh
+sudo apt install aapt zipalign zip openjdk-21-jdk-headless nodejs npm
+curl -fsSL https://bun.sh/install | bash
+```
+
 ## 1. App and APK name
 
 ```sh
@@ -52,6 +68,18 @@ modified by minapk.
 ```sh
 npx @drxiaozhi/minapk [/path/to/your.elf]
 ```
+
+> [!NOTE]
+> Run via `npx` (not a local checkout), the first build hits up to 3
+> confirmation prompts in a row, verified in practice; answer `y` (or `Y`) to
+> each -- this is expected:
+> 1. `npx` asks whether to install `@drxiaozhi/minapk` itself.
+> 2. With no local `no_backup` (the published npm package never ships one),
+>    `build.sh` asks whether to run `npx buninu@latest --export`.
+> 3. That `npx` call in turn asks whether to install `buninu`.
+>
+> Since every `npx` run is a fresh, throwaway environment, steps 2 and 3
+> reappear on nearly every run.
 
 This is the main entry point; the whole process is driven by `index.js`:
 
