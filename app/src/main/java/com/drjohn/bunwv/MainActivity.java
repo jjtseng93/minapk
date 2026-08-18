@@ -108,8 +108,45 @@ public class MainActivity extends Activity {
         root.addView(extraKeysBar, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         setContentView(root);
+        applyWindowInsets(root);
 
         startBunProcess();
+    }
+
+    // Apps targeting API 35+ are laid out edge-to-edge, and from API 36 on the
+    // windowOptOutEdgeToEdgeEnforcement flag is ignored, so the navigation bar
+    // would otherwise be drawn on top of the extra-keys bar. Take the insets
+    // ourselves and pad the root instead of drawing underneath the system bars.
+    private void applyWindowInsets(View root) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Without this the decor consumes the insets and the listener below
+            // only ever sees zeros.
+            getWindow().setDecorFitsSystemWindows(false);
+        }
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                int left, top, right, bottom;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Insets bars = insets.getInsets(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                    // Keep the bar above the keyboard too, without double-counting
+                    // the navigation bar the IME already covers.
+                    int ime = insets.getInsets(WindowInsets.Type.ime()).bottom;
+                    left = bars.left;
+                    top = bars.top;
+                    right = bars.right;
+                    bottom = Math.max(bars.bottom, ime);
+                } else {
+                    left = insets.getSystemWindowInsetLeft();
+                    top = insets.getSystemWindowInsetTop();
+                    right = insets.getSystemWindowInsetRight();
+                    bottom = insets.getSystemWindowInsetBottom();
+                }
+                v.setPadding(left, top, right, bottom);
+                return insets;
+            }
+        });
+        root.requestApplyInsets();
     }
 
     // Swallow volume-up and use it to toggle the extra-keys bar instead of
