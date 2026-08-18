@@ -4,6 +4,8 @@ import android.app.*;
 import android.content.*;
 import android.graphics.*;
 import android.media.*;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.os.*;
 import android.system.Os;
 import android.text.Editable;
@@ -23,6 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import org.json.*;
 
 public class MainActivity extends Activity {
 
@@ -235,6 +240,11 @@ public class MainActivity extends Activity {
                         }
                     }
 
+                    String bridgeEnvValue = startNativeBridge();
+                    if (bridgeEnvValue != null) {
+                        env.put("PKG_BRIDGE_SOCK", bridgeEnvValue);
+                    }
+
                     pb.redirectErrorStream(true);
                     java.lang.Process process = pb.start();
 
@@ -264,6 +274,214 @@ public class MainActivity extends Activity {
                 }
             }
         }).start();
+    }
+
+    // Dummy native bridge: listens on a Linux abstract-namespace unix socket
+    // and answers every request the same way ("succeeded", regardless of
+    // which function or arguments were actually sent), purely to verify the
+    // transport itself -- LocalServerSocket, Bun's `unix` fetch option, and
+    // native-bridge.js's percent-decoding of PKG_BRIDGE_SOCK -- works end to
+    // end inside a packaged APK, before any real Toast/ClipboardManager
+    // implementation is wired in.
+    //
+    // Returns the value to put in PKG_BRIDGE_SOCK, or null if the bridge
+    // could not be started (Bun still starts normally either way; the app
+    // just runs without a working native bridge, the same as it does today).
+    //
+    // LocalServerSocket(name) takes a plain name and puts it in the abstract
+    // namespace itself (prefixing the NUL byte internally) -- that is a
+    // socket-creation detail Android's own API already handles. The value
+    // handed to Bun's side is a different thing: an env var cannot carry a
+    // literal NUL byte, and rpc.mjs's unix-socket handling on the JS side
+    // expects a percent-encoded path it runs through decodeURIComponent(), so
+    // this returns "%00" followed by the same name, not the name itself.
+    private String startNativeBridge() {
+        final String name = getPackageName() + ".native-bridge";
+        final LocalServerSocket server;
+        try {
+            server = new LocalServerSocket(name);
+        } catch (IOException e) {
+            Log.w("NativeBridge", "failed to start native bridge", e);
+            writeErrorToTmp("native bridge failed to start; continuing without it", e);
+            return null;
+        }
+
+        new Thread(new Runnable() {
+            @Override public void run() {
+                while (true) {
+                    try {
+                        LocalSocket client = server.accept();
+                        handleNativeBridgeConnection(client);
+                    } catch (IOException e) {
+                        Log.w("NativeBridge", "accept loop stopped", e);
+                        break;
+                    }
+                }
+            }
+        }).start();
+
+        return "%00" + name;
+    }
+
+    // One request per connection: reads a minimal HTTP/1.1 request (headers
+    // up to the blank line, then exactly Content-Length body bytes) and
+    // writes back a minimal HTTP/1.1 response. Bun's fetch() does not require
+    // the connection to stay open afterward, so there is no keep-alive
+    // handling here.
+    //
+    // rpc.mjs's own client-side dispatch (rpcraw in rpc.mjs) requires
+    // _discover to answer with an object whose keys are the callable function
+    // names, or it rejects every later call locally before ever reaching this
+    // server; this pre-declares each function's name -- toast is short
+    // enough on its own, clipboardRead/clipboardWrite also get the short
+    // aliases getcb/setcb -- that native-bridge.js's own convenience
+    // wrappers use. Unrecognized function names get back the same
+    // "Unknown func ..." text rpc.mjs's own evalBack would produce, so
+    // native-bridge.js's THROW_UNKNOWN_FUNC/nothrow detection (which matches
+    // on that exact prefix) works the same whether the far side is this Java
+    // bridge or another rpc.mjs backend.
+    private void handleNativeBridgeConnection(final LocalSocket client) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    InputStream in = client.getInputStream();
+                    OutputStream out = client.getOutputStream();
+
+                    StringBuilder headerBuf = new StringBuilder();
+                    int prev3 = -1, prev2 = -1, prev1 = -1, b;
+                    while ((b = in.read()) != -1) {
+                        headerBuf.append((char) b);
+                        if (prev3 == '\r' && prev2 == '\n' && prev1 == '\r' && b == '\n') break;
+                        prev3 = prev2; prev2 = prev1; prev1 = b;
+                    }
+
+                    int contentLength = 0;
+                    for (String headerLine : headerBuf.toString().split("\r\n")) {
+                        int colon = headerLine.indexOf(':');
+                        if (colon < 0) continue;
+                        if (headerLine.substring(0, colon).trim().equalsIgnoreCase("Content-Length")) {
+                            contentLength = Integer.parseInt(headerLine.substring(colon + 1).trim());
+                        }
+                    }
+
+                    byte[] bodyBytes = new byte[contentLength];
+                    int read = 0;
+                    while (read < contentLength) {
+                        int n = in.read(bodyBytes, read, contentLength - read);
+                        if (n < 0) break;
+                        read += n;
+                    }
+                    String body = new String(bodyBytes, 0, read, "UTF-8");
+
+                    String responseJson = dispatchNativeBridgeRequest(body);
+
+                    byte[] responseBody = responseJson.getBytes("UTF-8");
+                    String responseHead = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: application/json\r\n" +
+                        "Content-Length: " + responseBody.length + "\r\n" +
+                        "Connection: close\r\n\r\n";
+                    out.write(responseHead.getBytes("UTF-8"));
+                    out.write(responseBody);
+                    out.flush();
+                } catch (Exception e) {
+                    Log.w("NativeBridge", "connection handling failed", e);
+                } finally {
+                    try { client.close(); } catch (IOException ignored) {}
+                }
+            }
+        }).start();
+    }
+
+    // Parses one rpc.mjs-protocol request body ([func, argv, envp], envp
+    // unused) and returns the JSON text to send back. Toast and clipboard
+    // access both require the main looper (Toast.show() needs one to attach
+    // its view to; ClipboardManager is likewise only reliably usable from the
+    // main thread), so both run through runOnMainThreadSync rather than
+    // directly on this per-connection thread.
+    private String dispatchNativeBridgeRequest(String body) throws Exception {
+        JSONArray request = new JSONArray(body);
+        String func = request.optString(0, "");
+        JSONArray argv = request.optJSONArray(1);
+        if (argv == null) argv = new JSONArray();
+        final JSONArray finalArgv = argv;
+
+        if (func.equals("_discover")) {
+            return "{\"toast\":[],"
+                + "\"clipboardRead\":[],\"getcb\":[],"
+                + "\"clipboardWrite\":[],\"setcb\":[]}";
+        }
+
+        if (func.equals("toast")) {
+            final String text = finalArgv.optString(0, "");
+            final boolean isLong = finalArgv.optBoolean(1, false);
+            runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    Toast.makeText(MainActivity.this, text,
+                        isLong ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
+                    return null;
+                }
+            });
+            return "true";
+        }
+
+        if (func.equals("clipboardRead") || func.equals("getcb")) {
+            Object result = runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
+                        CharSequence text = cm.getPrimaryClip().getItemAt(0)
+                            .coerceToText(MainActivity.this);
+                        return text != null ? text.toString() : null;
+                    }
+                    return null;
+                }
+            });
+            return result != null ? JSONObject.quote((String) result) : "null";
+        }
+
+        if (func.equals("clipboardWrite") || func.equals("setcb")) {
+            final String text = finalArgv.optString(0, "");
+            runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("native-bridge", text));
+                    }
+                    return null;
+                }
+            });
+            return "true";
+        }
+
+        return JSONObject.quote("Unknown func 未知函式: " + func + "\r\n" + finalArgv.toString());
+    }
+
+    // Runs task on the main looper and blocks the calling (background) thread
+    // until it finishes, returning its result or rethrowing whatever it
+    // threw. Toast and ClipboardManager calls need this; without it, the
+    // per-connection thread would either crash (Toast requires a Looper it
+    // does not have) or race the HTTP response against work that has not
+    // actually happened yet.
+    private Object runOnMainThreadSync(final Callable<Object> task) throws Exception {
+        final Object[] resultHolder = new Object[1];
+        final Throwable[] errorHolder = new Throwable[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                try {
+                    resultHolder[0] = task.call();
+                } catch (Throwable t) {
+                    errorHolder[0] = t;
+                } finally {
+                    latch.countDown();
+                }
+            }
+        });
+        latch.await();
+        if (errorHolder[0] != null) {
+            throw new Exception(errorHolder[0]);
+        }
+        return resultHolder[0];
     }
 
     /**
