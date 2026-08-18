@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import pkg from "./package.json" with { type: "json" };
 import { existsSync } from "node:fs";
 import { basename, extname, isAbsolute, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -9,6 +10,54 @@ const rootDir = import.meta.dirname;
 function fail(message) {
   console.error(`minapk: ${message}`);
   process.exit(1);
+}
+
+function usage() {
+  return `${pkg.name} - ${pkg.description}
+
+Usage:
+  ${pkg.name} [/path/to/your.elf] [options]
+
+Options:
+  -h, --help              Show this help and exit
+  -V, --version           Show version and runtime information, then exit
+  --readme                Render README.md in the terminal and exit
+  --config <package.json> Completely replace the Buninu package.json packaged into the APK
+  -c, --command <command> Override buninu.command for this build (composes with --config)
+  -n, --appname <name>    Override the app/APK name for this build (default: appname.txt)
+  -p, --pkgname <pkgname> Override the Android package name for this build (default: pkgname.txt)
+
+Without a path to an elf, this builds using the project root's existing
+libmain.so (if any) and appname.txt/pkgname.txt as-is. On success, the
+resulting APK is copied to the current directory as <appname>.apk, or
+<elf name>.apk when an elf was given.
+`;
+}
+
+async function handleInformationArguments(arguments_) {
+  if (arguments_.includes("-h") || arguments_.includes("--help")) {
+    console.log(usage());
+    return true;
+  }
+
+  if (arguments_.includes("-V") || arguments_.includes("--version")) {
+    console.log(`${pkg.name}: ${pkg.description}`);
+    console.log("Version:", pkg.version);
+    console.log("Runtime:", `Bun ${Bun.version}`);
+    console.log("Platform:", `${process.platform}/${process.arch}`);
+    return true;
+  }
+
+  if (arguments_.includes("--readme")) {
+    const readmePath = resolve(rootDir, "README.md");
+    if (!existsSync(readmePath)) fail(`README not found: ${readmePath}`);
+    const markdown = await Bun.file(readmePath).text();
+    process.stdout.write(Bun.markdown.ansi(markdown, { hyperlinks: true }));
+    if (!markdown.endsWith("\n")) process.stdout.write("\n");
+    return true;
+  }
+
+  return false;
 }
 
 function parseArguments(argv) {
@@ -204,6 +253,8 @@ async function applyPackagePatch(tgzPath, { configPath, command }) {
       (command !== null ? " [buninu.command patched]" : ""),
   );
 }
+
+if (await handleInformationArguments(process.argv.slice(2))) process.exit(0);
 
 const { elf: elfArgument, configPath, command, appName, pkgName } = parseArguments(process.argv.slice(2));
 const elfPath = elfArgument ? resolveElfPath(elfArgument) : null;
