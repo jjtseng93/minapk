@@ -328,11 +328,19 @@ that brings up the system IME to type or paste text directly.
   * ~~npx @drxiaozhi/minapk your_binary~~ (done, see "Build")
   * npx @drxiaozhi/minapk myapp.md
 - Native bridge (architecture still being designed)
-- `BUN_BE_BUN` mechanism: let `libmain.so` borrow the `libbun.so` Bun
-  executable directly, saving the APK space of packaging a full Bun binary
-  twice. Not settled yet -- shipping `libbun.so`/`libmain.so` as two separate
-  copies today means each can fall back for the other, and sharing one needs
-  to weigh giving that up
+- `BUN_BE_BUN` mechanism: `libmain.so` is, under the hood, a Bun executable
+  with a standalone module graph appended to it (the output of
+  `bun build --compile`), and normally detects and boots that embedded app
+  directly. Bun's own single-file-executable docs document the `BUN_BE_BUN=1`
+  environment variable, which makes that same binary behave like a plain
+  `bun` CLI instead, skipping the standalone-graph detection. In principle
+  `libmain.so` could double as `libbun.so` (invoke it with `BUN_BE_BUN=1`)
+  instead of packaging a whole separate Bun executable, saving significant
+  APK space. Not settled yet -- shipping `libbun.so`/`libmain.so` as two
+  separate copies today means each can fall back for the other (e.g. if
+  `libmain.so`'s standalone graph or `BUN_BE_BUN` behavior misbehaves, an
+  independent `libbun.so` is still there), and sharing one file needs to
+  weigh giving up that safety net
 
 ## License
 
