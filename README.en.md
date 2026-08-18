@@ -371,6 +371,74 @@ tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
+## Google Play distribution and policy
+
+> [!IMPORTANT]
+> An APK built by minapk is **not something you can publish as-is**. The three
+> points below are mechanical requirements, not matters of policy
+> interpretation -- uploading the current output to the Play Console gets
+> stopped on all three:
+>
+> - **Format**: new apps have only been accepted as
+>   [Android App Bundles (AAB)](https://developer.android.com/guide/app-bundle/faq)
+>   since August 2021; minapk produces an APK.
+> - **Target API**:
+>   [Play currently requires API 36 for new submissions and updates](https://support.google.com/googleplay/android-developer/answer/11926878)
+>   (existing apps hit the API 35 floor on 2026-08-31), while this project's
+>   `template/AndroidManifest.xml` is still `targetSdkVersion="34"`.
+> - **Signing**: new apps go through Play App Signing, where you hold only an
+>   upload key -- there is no way to keep using the shared
+>   `tools/debug.keystore` described under "APK signing and keytool" above.
+>
+> In other words, publishing requires at minimum switching to an AAB flow,
+> raising the target API, and moving to your own key. Only once all of that is
+> done does the murkier policy question below even come up.
+
+### The policy side
+
+Play's [Device and Network Abuse](https://support.google.com/googleplay/android-developer/answer/16559646)
+policy states that an app may not download executable code (dex, JAR, `.so`)
+from a source other than Google Play, and may not update itself by any means
+other than Play's update mechanism -- with an exception for code that runs in
+a virtual machine or an interpreter.
+
+How an APK built by minapk actually executes:
+
+- `libbun.so` and `libmain.so` are **packaged inside the APK** under
+  `lib/arm64-v8a/`, and the app runs them from `nativeLibraryDir` via
+  `ProcessBuilder`. That directory is one of the few locations that keeps
+  execute permission under the Android 10 (API 29) W^X restriction.
+- The Buninu payload (JS) is likewise **packaged inside the APK** in assets,
+  extracted to `no_backup` only on first launch, and then interpreted by that
+  same `libbun.so`.
+- Nothing in this flow downloads a native executable over the network.
+
+How comparable projects do it:
+
+- `libnode.so` ([nodejs-mobile](https://github.com/JaneaSystems/nodejs-mobile))
+  takes the more conservative route: Node is compiled as a genuine JNI shared
+  library, loaded with `System.loadLibrary("node")` into the app's own
+  process, with no forked/exec'd child process -- so it is simply "a native
+  library inside the APK".
+- minapk instead execs Bun as a standalone executable, which is closer to
+  [Termux's Play Store build](https://github.com/termux-play-store) (which
+  uses `system_linker_exec` to deal with the Android 10+ W^X restriction).
+  Termux itself went years without Play updates because of the target-API-29
+  execution restriction, and only returned to Play through that fork.
+
+What you still have to weigh yourself: by default the app opens an
+interactive shell in which the user can run arbitrary programs, and Buninu's
+`bunx` installs and runs packages from npm at run time. Obtaining code at run
+time like that is exactly what review scrutinizes most.
+
+> [!NOTE]
+> I am not a legal professional. The above is only a comparison of the public
+> policy text against what similar projects do, and is not legal or compliance
+> advice. `--no-shell` (that is, `buninu.exitAfterCmd`) is already provided so
+> your command can finish and exit outright instead of falling back to an
+> interactive shell, as one way to narrow that exposure. The actual review
+> standards and outcomes are left for users to discover.
+
 ## Roadmap
 - Fix xterm scrolling of jsgotty
 - ~~Add Ctrl Alt Shift keys~~ (done)

@@ -274,6 +274,37 @@ tools/debug.keystore
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
+## Google Play 上架與政策
+
+> [!IMPORTANT]
+> minapk 建出來的 APK **不是一個可以直接上架的成品**。以下三點是機制上的硬限制，跟政策解讀無關，照現況直接丟上 Play Console 就會被擋下來：
+>
+> - **格式**：新 App 自 2021 年 8 月起只收 [Android App Bundle（AAB）](https://developer.android.com/guide/app-bundle/faq)，minapk 產出的是 APK。
+> - **target API**：[Play 目前要求新上架與更新為 API 36](https://support.google.com/googleplay/android-developer/answer/11926878)（既有 App 的 API 35 下限為 2026/8/31），本專案 `template/AndroidManifest.xml` 目前是 `targetSdkVersion="34"`。
+> - **簽章**：新 App 一律走 Play App Signing，你手上只留 upload key，不可能沿用上方「APK 簽章與 keytool」提到、所有人共用的那份 `tools/debug.keystore`。
+>
+> 換句話說，要上架至少得自行改用 AAB 流程、拉高 target API、換成自己的金鑰。這些都做完之後，才輪到下面比較沒有標準答案的政策問題。
+
+### 政策面
+
+Play 的 [Device and Network Abuse](https://support.google.com/googleplay/android-developer/answer/16559646) 政策規定：App 不得從 Google Play 以外的來源下載可執行碼（dex、JAR、`.so`），也不得用 Play 更新機制以外的方式更新自己；但「在虛擬機或直譯器中執行的程式碼」不在此限。
+
+minapk 建出來的 APK 目前是這樣執行的：
+
+- `libbun.so`／`libmain.so` 都**隨 APK 打包**在 `lib/arm64-v8a/`，App 以 `ProcessBuilder` 從 `nativeLibraryDir` 執行。該目錄是 Android 10（API 29）W^X 限制下少數仍保有執行權限的位置。
+- Buninu payload（JS）同樣**隨 APK 打包**在 assets，首次啟動才解壓到 `no_backup`，再由上面那個 `libbun.so` 當直譯器執行。
+- 整個流程不會從網路下載任何原生可執行檔。
+
+類似專案的做法對照：
+
+- `libnode.so`（[nodejs-mobile](https://github.com/JaneaSystems/nodejs-mobile)）走更保守的路線——Node 編譯成真正的 JNI 共享函式庫，用 `System.loadLibrary("node")` 載入到 App 自己的行程內，不 fork/exec 子行程，所以它單純就是「APK 內的原生函式庫」。
+- minapk 是把 Bun 當獨立執行檔 exec，比較接近 [Termux 在 Play 上的版本](https://github.com/termux-play-store)（該版本以 `system_linker_exec` 處理 Android 10+ 的 W^X 限制）。Termux 本身曾因 target API 29 的執行限制長期無法在 Play 更新，後來才以這個分支回到 Play。
+
+仍需自行評估的部分：預設會開一個互動式 shell，使用者可以在裡面執行任意程式；Buninu 的 `bunx` 會在執行期從 npm 安裝並執行套件。這類「執行期才取得程式碼」的行為，正是審核最容易被盯上的地方。
+
+> [!NOTE]
+> 我本身不是法律專業，以上只是對照公開政策條文與類似專案做法的整理，不構成法律或合規建議。目前已提供 `--no-shell`（即 `buninu.exitAfterCmd`）讓指令跑完就直接結束、不落回互動式 shell，作為縮小暴露面的選項。實際的上架審核規範與結果，有待各位使用者自行發掘。
+
 ## 未來規劃
 - 修復xterm終端機捲動問題
 - ~~加入Ctrl Alt Shift等按鍵~~（已完成）
