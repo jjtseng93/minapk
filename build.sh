@@ -156,8 +156,8 @@ else
 fi
 
 progress 3 "Compile Java..."
-printf '%sNote: the onBackPressed() deprecation warning is expected and safe to ignore.%s\n' "$BOLD_GREEN" "$RESET"
-printf '%s注意：onBackPressed() 的棄用警告是正常的，可以安全忽略。%s\n' "$BOLD_GREEN" "$RESET"
+printf '%sNote: the onBackPressed() & Inset deprecation warning is expected and safe to ignore.%s\n' "$BOLD_GREEN" "$RESET"
+printf '%s注意：onBackPressed() 和 Inset 的棄用警告是正常的，可以安全忽略。%s\n' "$BOLD_GREEN" "$RESET"
 java -jar "$ECJ_JAR" -source 8 -target 8 -encoding UTF-8 \
   -bootclasspath "$ANDROID_JAR" \
   -classpath "$ANDROID_JAR" \
