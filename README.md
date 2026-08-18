@@ -287,6 +287,8 @@ xclip -o -selection clipboard             # 讀出來
 
 要直接呼叫這座橋、不透過 `xclip`，可以在 `js back` 區塊裡 `import { toast, clipboardRead, clipboardWrite } from` 該路徑；每次呼叫預設 5 秒逾時，Android 端沒有回應也不會卡住呼叫端。詳見 `no_backup/README.md` 的「Commands inside the shell」一節。
 
+同一座橋也接了語音朗讀：`tts "hello"` 會唸出文字並等講完才結束，`-a` 不等直接返回。沒有 App 可用時會退回 `espeak-ng`/`say`/PowerShell 等桌面平台指令，一樣可以用。
+
 ## 產生單一可執行檔
 
 以下兩條路徑都會產生 minapk 要的那種 elf——以 `/system/bin/linker64` 為載入器的 arm64 執行檔。兩者都需要 canary 版的 Bun：

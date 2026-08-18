@@ -398,6 +398,10 @@ block; every call times out after 5 seconds by default, so an unresponsive
 Android side can never hang the caller. See the "Commands inside the shell"
 section of `no_backup/README.md` for the full API.
 
+The same bridge also covers Text-To-Speech(tts): `tts "hello"` speaks text and waits for
+it to finish, `-a` returns immediately instead. Without the app it falls
+back to desktop commands (`espeak-ng`/`say`/PowerShell) instead.
+
 ## Producing a single-file executable
 
 Both routes below produce the kind of elf minapk wants -- an arm64 executable
