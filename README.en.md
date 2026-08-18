@@ -5,7 +5,7 @@
 
 - minapk is a Gradle-free Android APK build project. It uses command-line tools to process resources, compile Java, run R8/DEX, package, zipalign, and sign an APK, and embeds the [Buninu](https://www.npmjs.com/package/buninu) runtime in it.
 
-- Put `libmain.so` at the project root to make it run on startup (details below)
+- `npx @drxiaozhi/minapk /path/to/your.elf` -- just pass the elf path as a positional argument (details below)
 
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
