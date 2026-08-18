@@ -1,0 +1,19 @@
+{
+  "name": "@drxiaozhi/minapk",
+  "version": "0.1.0",
+  "description": "Build Android APKs from Bun Single-file executables or source code",
+  "license": "MIT",
+  "author": "Dr. John (醫者小智)",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "index.js",
+  "bin": {
+    "minapk": "index.js"
+  },
+  "scripts": {
+    "start": "bun ./index.js",
+    "clean": "bun ./clean.js"
+  }
+}
