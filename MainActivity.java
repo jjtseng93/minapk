@@ -6,12 +6,15 @@ import android.graphics.*;
 import android.media.*;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.net.Uri;
 import android.os.*;
+import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.system.Os;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Base64;
 import android.util.Log;
 import android.view.*;
 import android.view.inputmethod.EditorInfo;
@@ -43,6 +46,10 @@ public class MainActivity extends Activity {
     private boolean urlLoaded = false;
     private String lastExternalUrl;
     private long lastExternalUrlAt;
+
+    // ---- WebChromeClient.onShowFileChooser (rz upload via <input type=file>) ----
+    private static final int FILE_CHOOSER_REQUEST_CODE = 51423;
+    private ValueCallback<Uri[]> filePathCallback;
 
     // ---- native-bridge: speak/ttsStatus ----
     // speak() never blocks the caller: TextToSpeech's own completion signal
@@ -119,6 +126,32 @@ public class MainActivity extends Activity {
                     startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
                 } catch (Exception e) {
                     return false; // no app can handle it; let the WebView try instead
+                }
+                return true;
+            }
+        });
+        webView.setWebChromeClient(new WebChromeClient() {
+            // jsgotty's browser client uses a real <input type="file"> for rz
+            // uploads; without a WebChromeClient the tap on it does nothing
+            // at all (no picker, no error) because there's no host to route
+            // the request to.
+            @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                                         FileChooserParams params) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                filePathCallback = callback;
+
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) {
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                }
+
+                try {
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    return false;
                 }
                 return true;
             }
@@ -429,11 +462,18 @@ public class MainActivity extends Activity {
         final JSONArray finalArgv = argv;
 
         if (func.equals("_discover")) {
-            return "{\"toast\":[\"text\",\"long\"],"
-                + "\"clipboardRead\":[],\"getcb\":[],"
-                + "\"clipboardWrite\":[\"text\"],\"setcb\":[\"text\"],"
+            return "{"
+                + "\"toast\":[\"text\",\"long\"],"
+                + "\"clipboardRead\":[],"
+                + "\"getcb\":[],"
+                + "\"clipboardWrite\":[\"text\"],"
+                + "\"setcb\":[\"text\"],"
                 + "\"speak\":[\"text\",\"speed\",\"pitch\",\"flush\"],"
-                + "\"ttsStatus\":[\"handle\"],\"tts\":[\"handle\"]}";
+                + "\"ttsStatus\":[\"handle\"],"
+                + "\"tts\":[\"handle\"],"
+                + "\"dltext\":[\"name\",\"text\"],"
+                + "\"dlbin\":[\"name\",\"base64\"]"
+                + "}";
         }
 
         if (func.equals("toast")) {
@@ -516,7 +556,65 @@ public class MainActivity extends Activity {
             return JSONObject.quote(status);
         }
 
+        if (func.equals("dltext")) {
+            // Throwaway probe for the sz (ZMODEM download) native bridge:
+            // confirms writing into the public Downloads collection works
+            // via MediaStore with zero manifest permissions, before wiring
+            // up the real blob-bytes-over-JS-bridge path.
+            String name = finalArgv.optString(0, "file.txt");
+            String text = finalArgv.optString(1, "");
+            try {
+                Uri uri = writeToDownloads(name, text.getBytes("UTF-8"), "text/plain");
+                return JSONObject.quote(uri.toString());
+            } catch (IOException e) {
+                return JSONObject.quote("error: " + e.getMessage());
+            }
+        }
+
+        if (func.equals("dlbin")) {
+            String name = finalArgv.optString(0, "file.bin");
+            String base64 = finalArgv.optString(1, "");
+            try {
+                byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                Uri uri = writeToDownloads(name, data, "application/octet-stream");
+                return JSONObject.quote(uri.toString());
+            } catch (Exception e) {
+                return JSONObject.quote("error: " + e.getMessage());
+            }
+        }
+
         return JSONObject.quote("Unknown func 未知函式: " + func + "\r\n" + finalArgv.toString());
+    }
+
+    // Shared by dltext/dlbin. API 29+ goes through MediaStore.Downloads (no
+    // permissions needed for files the app itself creates); older versions
+    // fall back to writing the public Downloads dir directly, since scoped
+    // storage doesn't apply pre-Q.
+    private Uri writeToDownloads(String name, byte[] data, String mimeType) throws IOException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+            values.put(MediaStore.Downloads.MIME_TYPE, mimeType);
+            Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new IOException("MediaStore insert failed");
+            OutputStream out = getContentResolver().openOutputStream(uri);
+            try {
+                out.write(data);
+            } finally {
+                out.close();
+            }
+            return uri;
+        }
+        File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        dir.mkdirs();
+        File file = new File(dir, name);
+        OutputStream out = new FileOutputStream(file);
+        try {
+            out.write(data);
+        } finally {
+            out.close();
+        }
+        return Uri.fromFile(file);
     }
 
     // Lazily creates the TextToSpeech engine and blocks (with a bounded
@@ -888,6 +986,29 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != FILE_CHOOSER_REQUEST_CODE) {
+            super.onActivityResult(requestCode, resultCode, data);
+            return;
+        }
+        if (filePathCallback == null) return;
+
+        Uri[] results = null;
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                results = new Uri[count];
+                for (int i = 0; i < count; i++) {
+                    results[i] = data.getClipData().getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                results = new Uri[]{data.getData()};
+            }
+        }
+        filePathCallback.onReceiveValue(results);
+        filePathCallback = null;
     }
 
     // ------------------------------------------------ extra-keys control bar
