@@ -274,6 +274,19 @@ tools/debug.keystore
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
+## 原生剪貼簿支援
+
+App 內建一座從 Buninu 通到 Android 原生層的橋（`no_backup/apps/native-bridge`），透過 `MainActivity` 開的一個 unix socket，把 Toast 與系統剪貼簿讀寫暴露給 Buninu 裡跑的 Bun 行程。Buninu 隨附的 `xclip` 指令（`apps/xclip`）就是建在這座橋上：
+
+```sh
+echo hello | xclip -selection clipboard   # 寫進 Android 系統剪貼簿
+xclip -o -selection clipboard             # 讀出來
+```
+
+`-selection primary`（不帶 `-selection` 時的預設值）維持純本地檔案、不碰原生剪貼簿，對應真正 X11 的語意；只有 `-selection clipboard`/`-clip` 才會透過 native-bridge 走到 Android 系統剪貼簿。jsmdcui 的剪貼簿後端偵測本來就會在偵測到 `xclip` 時使用它，所以 jsmdcui 裡的滑鼠中鍵貼上、選取文字自動同步、`PastePrimary` 指令，在這個 App 裡不需要額外設定就能動作。
+
+要直接呼叫這座橋、不透過 `xclip`，可以在 `js back` 區塊裡 `import { toast, clipboardRead, clipboardWrite } from` 該路徑；每次呼叫預設 5 秒逾時，Android 端沒有回應也不會卡住呼叫端。詳見 `no_backup/README.md` 的「Commands inside the shell」一節。
+
 ## 產生單一可執行檔
 
 以下兩條路徑都會產生 minapk 要的那種 elf——以 `/system/bin/linker64` 為載入器的 arm64 執行檔。兩者都需要 canary 版的 Bun：

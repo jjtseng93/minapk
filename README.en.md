@@ -371,6 +371,33 @@ tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
+## Native clipboard support
+
+The app ships a bridge from Buninu to the Android native layer
+(`no_backup/apps/native-bridge`): `MainActivity` opens a unix socket that
+exposes Toast and system-clipboard read/write to the Bun process running
+inside Buninu. Buninu's bundled `xclip` command (`apps/xclip`) is built on
+top of that bridge:
+
+```sh
+echo hello | xclip -selection clipboard   # write to the Android system clipboard
+xclip -o -selection clipboard             # read it back
+```
+
+`-selection primary` (the default when `-selection` is omitted) stays
+local-file-only and never touches the native clipboard, matching real X11
+semantics; only `-selection clipboard`/`-clip` goes through native-bridge to
+the real Android clipboard. jsmdcui's own clipboard backend detection already
+uses `xclip` once it detects it, so jsmdcui's middle-click paste, selection
+auto-sync, and `PastePrimary` command all work inside this app with no extra
+setup.
+
+To call the bridge directly instead of going through `xclip`, `import {
+toast, clipboardRead, clipboardWrite } from` that path inside a `js back`
+block; every call times out after 5 seconds by default, so an unresponsive
+Android side can never hang the caller. See the "Commands inside the shell"
+section of `no_backup/README.md` for the full API.
+
 ## Producing a single-file executable
 
 Both routes below produce the kind of elf minapk wants -- an arm64 executable
