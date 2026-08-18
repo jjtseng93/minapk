@@ -42,6 +42,40 @@ public class MainActivity extends Activity {
     private static final String PAYLOAD_ASSET = "buninu.tgz";
     private static final String PAYLOAD_STAMP = "buninu.stamp";
 
+    // ---- sz (ZMODEM download) ----
+    // jsgotty's Zmodem.Browser.save_to_disk(pieces, name) builds a Blob +
+    // blob: URL + synthetic <a download> click -- WebView has no Java-side
+    // way to read a blob: URL's bytes back out (DownloadListener only sees
+    // the blob: string, never the content), so the bytes have to be handed
+    // over from inside the page's own JS instead. Re-run per onPageFinished
+    // since a real navigation wipes window.Zmodem along with the rest of the
+    // page's JS globals -- the window.Zmodem existence check guards the
+    // (likely, future) case where the WebView navigates to a page that
+    // never loads jsgotty's bundle at all.
+    private static final String SZ_SAVE_TO_DISK_PATCH_JS =
+        "(function(){\n"
+        + "if(typeof window.Zmodem==='undefined'||!window.Zmodem.Browser||typeof window.Zmodem.Browser.save_to_disk!=='function')return;\n"
+        + "if(typeof window.AndroidSz==='undefined')return;\n"
+        + "if(window.Zmodem.Browser.__buninuPatched)return;\n"
+        + "window.Zmodem.Browser.__buninuPatched=true;\n"
+        // gotty.js tries window.showSaveFilePicker first when it exists as a
+        // function, and its try/catch does NOT fall back to save_to_disk on
+        // failure -- it just aborts. WebView's own showSaveFilePicker exists
+        // but is broken ("user aborted a request"), so it has to be removed
+        // entirely to force gotty.js down the save_to_disk branch below.
+        + "try{delete window.showSaveFilePicker;}catch(e){}\n"
+        + "window.showSaveFilePicker=undefined;\n"
+        + "window.Zmodem.Browser.save_to_disk=function(pieces,name){\n"
+        + "new Blob(pieces).arrayBuffer().then(function(buf){\n"
+        + "var bytes=new Uint8Array(buf);\n"
+        + "var binary='';\n"
+        + "var chunk=32768;\n"
+        + "for(var i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));}\n"
+        + "window.AndroidSz.saveFile(name,btoa(binary));\n"
+        + "});\n"
+        + "};\n"
+        + "})();";
+
     private WebView webView;
     private boolean urlLoaded = false;
     private String lastExternalUrl;
@@ -87,7 +121,12 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+        webView.addJavascriptInterface(new SzJsBridge(this), "AndroidSz");
         webView.setWebViewClient(new WebViewClient() {
+            @Override public void onPageFinished(WebView view, String url) {
+                view.evaluateJavascript(SZ_SAVE_TO_DISK_PATCH_JS, null);
+            }
+
             // Only intercepts navigations the WebView itself initiates (link taps,
             // JS location changes, redirects) — not our own loadUrl() call that
             // opens the terminal, so it can't hijack that on the way in.
@@ -207,14 +246,52 @@ public class MainActivity extends Activity {
         root.requestApplyInsets();
     }
 
-    // Swallow volume-up and use it to toggle the extra-keys bar instead of
+    // Swallow volume-up and use it to open a small debug menu instead of
     // changing the media volume. Volume-down is left untouched.
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) toggleExtraKeys();
+            if (event.getAction() == KeyEvent.ACTION_DOWN) showDebugMenu();
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    private void showDebugMenu() {
+        new AlertDialog.Builder(this)
+            .setItems(new String[]{"Toggle ctrl/alt/shift bar", "Eval in WebView"},
+                new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface dialog, int which) {
+                        if (which == 0) toggleExtraKeys();
+                        else showEvalDialog();
+                    }
+                })
+            .show();
+    }
+
+    // For live-poking the WebView's JS state (e.g. typeof window.Zmodem)
+    // without a full rebuild cycle.
+    private void showEvalDialog() {
+        final EditText input = new EditText(this);
+        input.setHint("JS expression");
+        new AlertDialog.Builder(this)
+            .setTitle("Eval in WebView")
+            .setView(input)
+            .setPositiveButton("Run", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    if (webView == null) return;
+                    webView.evaluateJavascript(input.getText().toString(), new ValueCallback<String>() {
+                        @Override public void onReceiveValue(String value) {
+                            new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Result")
+                                .setMessage(String.valueOf(value))
+                                .setPositiveButton("OK", null)
+                                .show();
+                        }
+                    });
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     // Tapping the WebView while a modifier chord is armed clears it, so a
@@ -615,6 +692,36 @@ public class MainActivity extends Activity {
             out.close();
         }
         return Uri.fromFile(file);
+    }
+
+    // Exposed to the WebView's own JS realm as window.AndroidSz -- separate
+    // from the Bun-side native-bridge unix socket, since this is called
+    // directly by page JS (the injected save_to_disk patch above), not by a
+    // Bun process. @JavascriptInterface methods run off the main thread,
+    // which is fine here since writeToDownloads only does ContentResolver/
+    // File IO.
+    // static, not an inner class: addJavascriptInterface objects are
+    // commonly documented to need a plain public (ideally static) class --
+    // a non-static inner class carries an implicit MainActivity.this
+    // reference that some WebView/Chromium builds fail to resolve through
+    // reflection. Takes the Activity explicitly instead to reach
+    // writeToDownloads().
+    public static class SzJsBridge {
+        private final MainActivity activity;
+
+        SzJsBridge(MainActivity activity) {
+            this.activity = activity;
+        }
+
+        @JavascriptInterface
+        public void saveFile(String name, String base64) {
+            try {
+                byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                activity.writeToDownloads(name, data, "application/octet-stream");
+            } catch (Exception e) {
+                Log.e("MainActivity", "sz saveFile failed", e);
+            }
+        }
     }
 
     // Lazily creates the TextToSpeech engine and blocks (with a bounded
