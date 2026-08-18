@@ -154,11 +154,25 @@ how the `default`/`android`/`linux` sub-fields would otherwise merge).
   Buninu payload is the base; `-c` likewise only overrides `buninu.command`,
   with no need to prepare a `--config` file at all.
 
-`-c`/`--config` can be combined freely with `-n`/`-p` (sections 1 and 2) and
-the elf positional argument, for example:
+### Disable the fall-back-to-shell behavior with `--no-shell`
 
 ```sh
-npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello"
+npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
+```
+
+`--no-shell` takes no value; its presence sets `buninu.exitAfterCmd` to `true`
+(default `false`, see the `exitAfterCmd` note in
+[Buninu's README](https://www.npmjs.com/package/buninu)): once
+`buninu.command` finishes, the shell/PTY exits immediately instead of falling
+back to an interactive shell like the default does. It composes the same way
+`-c` does -- layered on top of `--config` when given, or on top of this run's
+freshly exported `package.json` otherwise, leaving every other field alone.
+
+`-c`/`--no-shell`/`--config` can be combined freely with `-n`/`-p` (sections 1
+and 2) and the elf positional argument, for example:
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
 ```
 
 ## Update only the Buninu payload

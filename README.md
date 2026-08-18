@@ -108,10 +108,18 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom startup command"
 - 有帶 `--config`：以 `--config` 檔案的內容當底，`-c` 只覆蓋其中的 `buninu.command`，其他欄位維持 `--config` 檔案原樣。
 - 沒帶 `--config`：以本次 export 出來、Buninu payload 裡原本的 `package.json` 當底，一樣只覆蓋 `buninu.command`，其餘欄位維持原樣，不需要另外準備 `--config` 檔案。
 
-`-c`/`--config` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+### 用 `--no-shell` 停用「指令跑完掉回互動式 shell」
 
 ```sh
-npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello"
+npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
+```
+
+`--no-shell` 不用帶值，出現就把 `buninu.exitAfterCmd` 設成 `true`（預設 `false`，見 [Buninu README](https://www.npmjs.com/package/buninu) 的 `exitAfterCmd` 說明）：`buninu.command` 執行完後直接結束，不會像預設那樣掉回互動式 shell。合併規則跟 `-c` 一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
+
+`-c`/`--no-shell`/`--config` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
 ```
 
 ## 只更新 Buninu payload

@@ -19,13 +19,16 @@ Usage:
   ${pkg.name} [/path/to/your.elf] [options]
 
 Options:
-  -h, --help              Show this help and exit
-  -V, --version           Show version and runtime information, then exit
-  --readme                Render README.md in the terminal and exit
-  --config <package.json> Completely replace the Buninu package.json packaged into the APK
-  -c, --command <command> Override buninu.command for this build (composes with --config)
-  -n, --appname <name>    Override the app/APK name for this build (default: appname.txt)
-  -p, --pkgname <pkgname> Override the Android package name for this build (default: pkgname.txt)
+  -h, --help               Show this help and exit
+  -V, --version            Show version and runtime information, then exit
+  --readme                 Render README.md in the terminal and exit
+  --config <package.json>  Completely replace the Buninu package.json packaged into the APK
+  -c, --command <command>  Override buninu.command for this build (composes with --config)
+  --no-shell               Set buninu.exitAfterCmd so the shell/PTY exits after
+                           buninu.command instead of falling back to an
+                           interactive shell (composes with --config)
+  -n, --appname <name>     Override the app/APK name for this build (default: appname.txt)
+  -p, --pkgname <pkgname>  Override the Android package name for this build (default: pkgname.txt)
 
 Without a path to an elf, this builds using the project root's existing
 libmain.so (if any) and appname.txt/pkgname.txt as-is. On success, the
@@ -61,7 +64,7 @@ async function handleInformationArguments(arguments_) {
 }
 
 function parseArguments(argv) {
-  const result = { elf: null, configPath: null, command: null, appName: null, pkgName: null };
+  const result = { elf: null, configPath: null, command: null, noShell: false, appName: null, pkgName: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--config") {
@@ -77,6 +80,8 @@ function parseArguments(argv) {
       index += 1;
     } else if (argument.startsWith("--command=")) {
       result.command = argument.slice("--command=".length);
+    } else if (argument === "--no-shell") {
+      result.noShell = true;
     } else if (argument === "-n" || argument === "--appname") {
       result.appName = argv[index + 1];
       if (!result.appName) fail("-n/--appname requires a name");
@@ -191,10 +196,11 @@ async function ensureBuninuPayload() {
 // just Bun's own reader.
 //
 // The base package.json is `--config`'s file when given, otherwise the one
-// already inside the payload (freshly exported above); `-c`/`--command`, when
-// given, is then patched into that base's `buninu.command` before appending,
-// so the two flags compose instead of being mutually exclusive.
-async function applyPackagePatch(tgzPath, { configPath, command }) {
+// already inside the payload (freshly exported above); `-c`/`--command` and
+// `--no-shell`, when given, are then patched into that base's `buninu.command`
+// and `buninu.exitAfterCmd` before appending, so the flags compose instead of
+// being mutually exclusive.
+async function applyPackagePatch(tgzPath, { configPath, command, noShell }) {
   const tar = Bun.gunzipSync(new Uint8Array(await Bun.file(tgzPath).arrayBuffer()));
 
   const existingFiles = await new Bun.Archive(tar).files();
@@ -214,7 +220,7 @@ async function applyPackagePatch(tgzPath, { configPath, command }) {
   }
 
   let packageJsonText = baseText;
-  if (command !== null) {
+  if (command !== null || noShell) {
     let parsed;
     try {
       parsed = JSON.parse(baseText);
@@ -222,7 +228,9 @@ async function applyPackagePatch(tgzPath, { configPath, command }) {
       const source = configPath ? `--config file (${configPath})` : `${packageJsonKey} in payload`;
       fail(`${source} is not valid JSON: ${error.message}`);
     }
-    parsed.buninu = { ...(parsed.buninu ?? {}), command };
+    parsed.buninu = { ...(parsed.buninu ?? {}) };
+    if (command !== null) parsed.buninu.command = command;
+    if (noShell) parsed.buninu.exitAfterCmd = true;
     packageJsonText = `${JSON.stringify(parsed, null, 2)}\n`;
   } else if (configPath) {
     try {
@@ -250,22 +258,23 @@ async function applyPackagePatch(tgzPath, { configPath, command }) {
   console.error(
     `minapk: wrote ${packageJsonKey} in ${tgzPath}` +
       (configPath ? ` (base: ${configPath})` : " (base: payload's own package.json)") +
-      (command !== null ? " [buninu.command patched]" : ""),
+      (command !== null ? " [buninu.command patched]" : "") +
+      (noShell ? " [buninu.exitAfterCmd patched]" : ""),
   );
 }
 
 if (await handleInformationArguments(process.argv.slice(2))) process.exit(0);
 
-const { elf: elfArgument, configPath, command, appName, pkgName } = parseArguments(process.argv.slice(2));
+const { elf: elfArgument, configPath, command, noShell, appName, pkgName } = parseArguments(process.argv.slice(2));
 const elfPath = elfArgument ? resolveElfPath(elfArgument) : null;
 
 const buildScript = resolve(rootDir, "build.sh");
 if (!existsSync(buildScript)) fail(`build script not found: ${buildScript}`);
 
 const buildArguments = [];
-if (configPath || command !== null) {
+if (configPath || command !== null || noShell) {
   const tgzPath = await ensureBuninuPayload();
-  await applyPackagePatch(tgzPath, { configPath, command });
+  await applyPackagePatch(tgzPath, { configPath, command, noShell });
   buildArguments.push(tgzPath);
 }
 
