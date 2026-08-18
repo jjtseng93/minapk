@@ -327,6 +327,12 @@ that brings up the system IME to type or paste text directly.
 - Wrap until we reach
   * ~~npx @drxiaozhi/minapk your_binary~~ (done, see "Build")
   * npx @drxiaozhi/minapk myapp.md
+- Native bridge (architecture still being designed)
+- `BUN_BE_BUN` mechanism: let `libmain.so` borrow the `libbun.so` Bun
+  executable directly, saving the APK space of packaging a full Bun binary
+  twice. Not settled yet -- shipping `libbun.so`/`libmain.so` as two separate
+  copies today means each can fall back for the other, and sharing one needs
+  to weigh giving that up
 
 ## License
 

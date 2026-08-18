@@ -249,6 +249,8 @@ CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按�
 - 一直包裝直到做到
   * ~~npx @drxiaozhi/minapk your_binary~~（已完成，見「建置」）
   * npx @drxiaozhi/minapk myapp.md
+- 原生 bridge（架構還在設計中）
+- `BUN_BE_BUN` 機制：讓 `libmain.so` 直接借用 `libbun.so` 這份 Bun 執行檔，省掉重複打包一份完整 Bun 的 APK 空間。架構還沒定案——目前 `libbun.so`／`libmain.so` 各自一份的好處是兩者可以互相 fallback，改成共用之後要想清楚失去這層 fallback 的取捨
 
 ## License
 
