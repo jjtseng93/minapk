@@ -9,31 +9,27 @@
 
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
-## 1. 修改應用程式名稱與 APK 名稱
+## 1. 應用程式名稱與 APK 名稱
 
-編輯 `appname.txt`：
-
-```text
-Hello2
+```sh
+npx @drxiaozhi/minapk -n MyApp
 ```
 
-這個值同時用於：
+`-n`/`--appname <name>` 決定：
 
 - Android 顯示的應用程式名稱。
-- 完整建置輸出的 APK 名稱，例如 `Hello2.apk`。
-- repack 輸入與輸出名稱，例如 `Hello2.apk` → `Hello2r.apk`。
+- 建置輸出的 APK 名稱，例如 `MyApp.apk`。
+- repack 輸入與輸出名稱，例如 `MyApp.apk` → `MyAppr.apk`。
 
-檔案只需放一行名稱，不要加 `.apk`。
+不帶 `-n` 時，會用專案根目錄 `appname.txt` 目前的值（`Hello2`）當預設；minapk 不會寫入或修改這個檔案，所以不帶 `-n` 的建置永遠得到同一個、可預期的名稱。
 
-## 2. 修改 Android package name
+## 2. Android package name
 
-編輯 `pkgname.txt`：
-
-```text
-com.drjohn.bunwv
+```sh
+npx @drxiaozhi/minapk -p com.drjohn.bunwv
 ```
 
-這是 Android 的 package name/application ID，不是 APK 檔名。它應使用反向網域格式，並且必須是有效的 Java package 名稱。修改後需要執行完整的 `build.sh`；只有 `repack.sh` 不會改變 package name。
+`-p`/`--pkgname <pkgname>` 決定 Android 的 package name/application ID，不是 APK 檔名。它應使用反向網域格式，並且必須是有效的 Java package 名稱；`repack.sh` 不會改變 package name，只有完整建置會套用。
 
 建議使用 `com.<6 字元>.<5 字元>` 的格式，讓完整 package name 維持
 16 個 ASCII 字元，例如 `com.drjohn.bunwv`。這不是 Android 的強制限制；
@@ -41,40 +37,82 @@ com.drjohn.bunwv
 對含有該固定路徑的 Termux binary 進行等長 patch，而不必移動 binary
 內的其他資料。目前的 build 流程尚未自動進行這種 patch。
 
-## 3. 完整建置
+不帶 `-p` 時，會用專案根目錄 `pkgname.txt` 目前的值（`com.drjohn.bunwv`）當預設，同樣不會被 minapk 寫入或修改。
+
+## 3. 建置
 
 ```sh
-./build.sh
+npx @drxiaozhi/minapk [/path/to/your.elf]
 ```
 
-`build.sh` 會執行完整流程：
+這是主要入口，整個流程都由 `index.js` 驅動：
 
-1. 從本地 `no_backup` 匯出 `buninu.tgz`，並產生 `buninu.stamp`。 沒有本地的時候會詢問是否 `npx buninu --export` 產生
-2. 根據 `appname.txt` 與 `pkgname.txt` 準備 manifest、資源和 Java 原始碼。
-3. 使用 aapt2、ECJ 與 R8 編譯資源及程式碼。
-4. 封裝 Buninu payload 與原生函式庫。
-5. 執行 zipalign。
-6. 使用 `tools/debug.keystore` 簽章；不存在時會自動建立。
-7. 在專案根目錄輸出 `<appname>.apk`。
+1. 若有帶 elf 路徑，把它複製成專案根目錄的 `libmain.so`（自動加上可執行權限）。
+2. 準備 Buninu payload 與 manifest/資源/Java 原始碼，用 aapt2、ECJ、R8 編譯，封裝 Buninu payload 與原生函式庫，執行 zipalign，並用 `tools/debug.keystore` 簽章（不存在時自動建立），輸出到專案根目錄的 `<appname>.apk`（例如目前設定會是 `Hello2.apk`）。
+3. build 成功且有帶 elf 時，把輸出的 APK 複製一份到 elf 原本所在的目錄，檔名是 elf 本身的檔名（去掉副檔名，若原本就沒有副檔名也一樣正確處理）加上 `.apk`。例如 `myapp.elf` 旁邊會多一個 `myapp.apk`。
 
-例如目前的設定會輸出：
-
-```text
-Hello2.apk
-```
-
-腳本採用 POSIX shell 語法，可在 Android 上使用：
+在有 checkout 的情況下也可以直接跑（效果相同）：
 
 ```sh
-/system/bin/sh ./build.sh
+bun ./index.js
 ```
+
+實際編譯步驟由 `index.js` 內部 spawn 的 `build.sh` 完成，它是 POSIX shell script，執行環境需要有 `/bin/sh`（或 Android 的 `/system/bin/sh`）；一般不需要直接呼叫它。
 
 - `libmain.so`: 必須是使用 Android Bun 編譯、以 /system/bin/linker64 為執行載入器的執行檔（Bun >= 1.4 支援）。Android App 啟動時會自動執行。如果專案根目錄包含此檔案，建置時會將它封裝到 APK 的原生 lib/arm64-v8a 目錄中；若不存在則會直接略過，不會報錯。
 
-- 封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，`build.sh` 會執行
+- 封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，會執行
 `which bun`，並將找到的 Bun 複製為根目錄的 `libbun.so`；找不到 Bun
 或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
 執行的版本。
+
+清除 `build/` 暫存資料夾：
+
+```sh
+npm run clean
+# 等同
+bun ./clean.js
+```
+
+## 4. 進階設定
+
+### 用 `--config` 完全取代封裝進 APK 的 Buninu `package.json`
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf --config /path/to/package.json
+```
+
+`--config` 指到的檔案會**完整取代**封裝進 APK 的 Buninu payload 裡的 `package.json`（是整份換掉，不是合併），可以用來自訂 `buninu.shell`、`buninu.command`、`buninu.exitAfterCmd` 等啟動設定，而不用去修改 `no_backup` 裡的原始檔案。
+
+運作方式：
+
+1. 跟 `build.sh` 自己內部的做法一樣，先從本地 `no_backup` 匯出一份 `buninu.tgz`（沒有 `no_backup` 則詢問是否 `npx buninu@latest --export`）。
+2. 把 `--config` 檔案的內容原封不動 append 成 tar 裡第二個同路徑的 `<頂層目錄>/package.json` entry，寫在既有內容的尾端——不重新打包整個 tgz，其餘上千筆 entry（含 symlink、可執行權限）完全不動。tar 解壓時後面的 entry 會覆蓋前面的，所以 App 實際解出來的就是 `--config` 提供的那份。
+3. 把處理好的 tgz 路徑傳給 `build.sh`，跳過它自己的 export 步驟。
+
+> [!IMPORTANT]
+> `--config` 檔案必須是**完整**的 `package.json`（含 `name`/`version`/`scripts`/`bin` 等欄位），不是只寫 `buninu` 那一段，因為是整份取代、不是合併。可以先用 `npx buninu@latest --export-config` 產生一份完整的 `buninu.json` 當起點，直接拿來改 `buninu` 區段後當 `--config` 的輸入即可。
+
+### 用 `-c`/`--command` 做單項覆蓋
+
+不想為了改一個欄位就手寫一份完整 `package.json`，可以只用這個旗標：
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom startup command"
+```
+
+`-c`/`--command <command>` 把封裝進 APK 的 `package.json` 裡的 `buninu.command` **整個欄位**覆蓋成這個字串（`buninu` 本身也接受 `"command": "字串"` 這種簡寫，等同套用到所有平台，minapk 只建置 Android 所以不用管 `default`/`android`/`linux` 這些子欄位怎麼合併）。
+
+`-c` 可以跟 `--config` **合併使用**而不是互斥：
+
+- 有帶 `--config`：以 `--config` 檔案的內容當底，`-c` 只覆蓋其中的 `buninu.command`，其他欄位維持 `--config` 檔案原樣。
+- 沒帶 `--config`：以本次 export 出來、Buninu payload 裡原本的 `package.json` 當底，一樣只覆蓋 `buninu.command`，其餘欄位維持原樣，不需要另外準備 `--config` 檔案。
+
+`-c`/`--config` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello"
+```
 
 ## 只更新 Buninu payload
 
@@ -172,9 +210,9 @@ tools/debug.keystore
 
 ## 未來規劃
 - 修復xterm終端機捲動問題
-- 加入Ctrl Alt Shift等按鍵
+- ~~加入Ctrl Alt Shift等按鍵~~（已完成）
 - 一直包裝直到做到
-  * npx @drxiaozhi/minapk your_binary
+  * ~~npx @drxiaozhi/minapk your_binary~~（已完成，見「建置」）
   * npx @drxiaozhi/minapk myapp.md
 
 ## License

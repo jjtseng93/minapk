@@ -24,11 +24,15 @@ PROJ=$sd/app/src/main
 BUILD=$sd/build
 
 # com.<6 chars>.<5 chars>
-PKG_NAME=$(cat "$sd"/pkgname.txt | tr -d '\r\n')
+# MINAPK_PKGNAME/MINAPK_APPNAME (set by index.js's -p/-n) override the
+# checked-in pkgname.txt/appname.txt for this run only; the files on disk are
+# never modified, so a plain run without those flags always builds from the
+# same predictable, checked-in defaults.
+PKG_NAME=${MINAPK_PKGNAME:-$(cat "$sd"/pkgname.txt | tr -d '\r\n')}
 # com/<6 chars>/<5 chars>
-PKG_PATH=$(cat "$sd"/pkgname.txt | tr -d '\r\n' | tr '.' '/')
+PKG_PATH=$(printf '%s' "$PKG_NAME" | tr '.' '/')
 
-app_name=$(cat "$sd"/appname.txt | tr -d '\r\n')
+app_name=${MINAPK_APPNAME:-$(cat "$sd"/appname.txt | tr -d '\r\n')}
 
 BUNINU_TGZ=$sd/buninu.tgz
 
