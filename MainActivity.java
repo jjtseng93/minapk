@@ -774,6 +774,10 @@ public class MainActivity extends Activity {
     // ------------------------------------------------ extra-keys UI (views only)
 
     private Button makeModifierButton(String label, final String modifier) {
+        return makeModifierButton(label, modifier, null);
+    }
+
+    private Button makeModifierButton(String label, final String modifier, final Runnable onLongPress) {
         Button btn = new Button(this);
         btn.setText(label);
         btn.setTextSize(12);
@@ -785,6 +789,11 @@ public class MainActivity extends Activity {
         btn.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggleKeyModifier(modifier); }
         });
+        if (onLongPress != null) {
+            btn.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override public boolean onLongClick(View v) { onLongPress.run(); return true; }
+            });
+        }
         return btn;
     }
 
@@ -868,7 +877,8 @@ public class MainActivity extends Activity {
     private FrameLayout buildExtraKeysBar() {
         ctrlButton = makeModifierButton("CTRL", "CTRL");
         altButton = makeModifierButton("ALT", "ALT");
-        shiftButton = makeModifierButton("SHFT", "SHIFT");
+        shiftButton = makeModifierButton("SHFT", "SHIFT",
+            new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_D, CTRL_MODIFIER); } });
 
         LinearLayout row1 = new LinearLayout(this);
         row1.setOrientation(LinearLayout.HORIZONTAL);

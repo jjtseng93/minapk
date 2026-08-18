@@ -295,6 +295,32 @@ The default debug keystore is suitable for local testing. Use your own release
 keystore for production distribution, and securely back up its private key and
 passwords.
 
+## On-screen key bar
+
+The built app has a row of terminal-friendly keys at the bottom; a short tap
+and a long press often do different things:
+
+| Key | Short press | Long press |
+| --- | --- | --- |
+| ESC | Esc | Ctrl+Q |
+| SHFT | Toggle the Shift modifier | **Ctrl+D** |
+| ^C x | Ctrl+C | Ctrl+X |
+| HOME | Home | Ctrl+U |
+| END | End | Ctrl+K |
+| TAB | Tab | Shift+Tab |
+| PGU | Page Up | Hold to scroll up continuously (mouse wheel) |
+| PGD | Page Down | Hold to scroll down continuously (mouse wheel) |
+| ↑ ↓ ← → | Arrow keys | Hold for auto-repeat |
+| Ent | Enter | Forward Delete |
+| CTRL / ALT | Toggle the Ctrl / Alt modifier | (none) |
+
+CTRL, ALT, and SHFT are Termux-style one-shot modifiers: a short tap
+highlights the button to show it's armed, and it's automatically cleared once
+applied to the next key you press -- so typing Ctrl+C is just tap CTRL, then
+tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
+There's also a very narrow, near-invisible text field in the top-right corner
+that brings up the system IME to type or paste text directly.
+
 ## Roadmap
 - Fix xterm scrolling of jsgotty
 - ~~Add Ctrl Alt Shift keys~~ (done)

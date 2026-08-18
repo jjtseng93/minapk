@@ -223,6 +223,26 @@ tools/debug.keystore
 
 預設 debug keystore 適合本地測試；正式發佈時應改用你自己的 release keystore，並妥善備份私鑰與密碼。
 
+## 螢幕按鍵列
+
+建出來的 App 底部有一排終端機常用按鍵，很多鍵短按跟長按是不同功能：
+
+| 按鍵 | 短按 | 長按 |
+| --- | --- | --- |
+| ESC | Esc | Ctrl+Q |
+| SHFT | 切換 Shift 修飾鍵 | **Ctrl+D** |
+| ^C x | Ctrl+C | Ctrl+X |
+| HOME | Home | Ctrl+U |
+| END | End | Ctrl+K |
+| TAB | Tab | Shift+Tab |
+| PGU | Page Up | 按住持續向上捲動（滑鼠滾輪） |
+| PGD | Page Down | 按住持續向下捲動（滑鼠滾輪） |
+| ↑ ↓ ← → | 方向鍵 | 按住連續輸入 |
+| Ent | Enter | Forward Delete |
+| CTRL / ALT | 切換 Ctrl / Alt 修飾鍵 | （無） |
+
+CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
+
 ## 未來規劃
 - 修復xterm終端機捲動問題
 - ~~加入Ctrl Alt Shift等按鍵~~（已完成）
