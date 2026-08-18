@@ -561,7 +561,9 @@ time like that is exactly what review scrutinizes most.
 - Wrap until we reach
   * ~~npx @drxiaozhi/minapk your_binary~~ (done, see "Build")
   * npx @drxiaozhi/minapk myapp.md
-- Native bridge (architecture still being designed)
+- ~~Native bridge (architecture still being designed)~~ (done: `native-bridge`/
+  `xclip`/`tts`, currently toast, clipboard, and TTS; what's missing now is
+  exposing more Android capabilities, see below)
 - `BUN_BE_BUN` mechanism: `libmain.so` is, under the hood, a Bun executable
   with a standalone module graph appended to it (the output of
   `bun build --compile`), and normally detects and boots that embedded app
