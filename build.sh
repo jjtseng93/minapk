@@ -106,16 +106,17 @@ fi
 
 heading "Preparing source files"
 
-rm -r "$sd"/app/src/main/java
+rm -rf "$sd"/app/src/main/java
 mkdir -p "$sd"/app/src/main/java/"$PKG_PATH"
 sed \
   -e "s/com.drjohn.test1/$PKG_NAME/" \
   "$sd"/MainActivity.java > "$sd"/app/src/main/java/"$PKG_PATH"/MainActivity.java
   
   
-# { 
+# {
 cd "$sd"/app/src/main
 
+mkdir -p ./res/values
 cat "$sd"/template/strings.xml | sed "s/Hello1/$app_name/">./res/values/strings.xml.tmp
 mv ./res/values/strings.xml.tmp ./res/values/strings.xml
 
