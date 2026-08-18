@@ -31,7 +31,6 @@ PKG_PATH=$(cat "$sd"/pkgname.txt | tr -d '\r\n' | tr '.' '/')
 app_name=$(cat "$sd"/appname.txt | tr -d '\r\n')
 
 BUNINU_TGZ=$sd/buninu.tgz
-BUNINU_STAMP=$sd/buninu.stamp
 
 RESET=$(printf '\033[0m')
 BOLD_CYAN=$(printf '\033[1;36m')
@@ -51,7 +50,22 @@ heading "Building $PKG_NAME APK → $app_name.apk"
 # Archives must contain exactly one top-level directory; the Android installer
 # strips that directory and extracts directly into its Buninu home. Prefer a
 # local checkout, and require explicit consent before downloading from npm.
-if [ -d "$sd/no_backup" ]; then
+if [ -n "$1" ]; then
+  case "$1" in
+    *.tgz)
+      BUNINU_TGZ=$(realpath "$1")
+      if [ ! -f "$BUNINU_TGZ" ]; then
+        echo "Provided Buninu payload not found: $BUNINU_TGZ" >&2
+        exit 1
+      fi
+      heading "Using provided Buninu payload: $BUNINU_TGZ"
+      ;;
+    *)
+      echo "Unrecognized argument: $1 (expected a .tgz path)" >&2
+      exit 1
+      ;;
+  esac
+elif [ -d "$sd/no_backup" ]; then
   heading "Creating Buninu payload from local no_backup: $BUNINU_TGZ"
   if ! bun "$sd/no_backup/bin/init.js" --export "$BUNINU_TGZ"; then
     echo "Local Buninu export failed" >&2
@@ -79,7 +93,11 @@ if [ ! -f "$BUNINU_TGZ" ]; then
   echo "Buninu export did not create: $BUNINU_TGZ" >&2
   exit 1
 fi
-bun "$sd/make-stamp.js" "$BUNINU_TGZ"
+BUNINU_STAMP=$(bun "$sd/make-stamp.js" "$BUNINU_TGZ" | head -n 1)
+if [ -z "$BUNINU_STAMP" ] || [ ! -f "$BUNINU_STAMP" ]; then
+  echo "Failed to create stamp for: $BUNINU_TGZ" >&2
+  exit 1
+fi
 
 
 heading "Preparing source files"
