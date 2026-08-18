@@ -371,28 +371,113 @@ tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
+## Producing a single-file executable
+
+Both routes below produce the kind of elf minapk wants -- an arm64 executable
+whose loader is `/system/bin/linker64`. Both need a canary build of Bun:
+
+```sh
+bun upgrade --canary
+```
+
+### Route 1: a one-line `bun build`
+
+`hlw.js`:
+
+```js
+console.log("Hello from Bun single-file executable")
+```
+
+```sh
+bun build --format=esm --compile --minify --bytecode ./hlw.js
+npx @drxiaozhi/minapk hlw
+```
+
+That gives you `hlw.apk`. The output name needs no flag: the extension is
+stripped to give `hlw` (or `hlw.exe` on Windows).
+
+### Route 2: a Markdown app
+
+`hlw.md`:
+
+````markdown
+#!/usr/bin/env jsmdcui
+
+## Question 問題
+- What is 1+2+3+4+..+..+∞
+
+```text#ans
+-1/12
+```
+- [Submit 提交](javascript:checkAns())
+- [Where am I? 我在哪？](javascript:whereAmI())
+
+```js front
+export function checkAns()
+{
+  if($('#ans').val().trim()=='-1/12')
+    $('#ans').val('答對🥳Right!');
+  else
+    $('#ans').val('答錯😫Wrong!');
+}
+
+export async function whereAmI()
+{
+  const r = await rpc.sysinfo();
+  alert(Object.entries(r).map(([k, v]) => `${k}: ${v}`).join('\n'));
+}
+```
+
+```js back
+export function sysinfo()
+{
+  return {
+    bun: Bun.version,
+    platform: process.platform,
+    arch: process.arch,
+    buninu: process.env.BUNINU_HOME ?? '(not under Buninu)',
+    android: process.env.PKG_DDIR ?? '(not inside an APK)',
+  };
+}
+```
+````
+
+```sh
+npx jsmdcui --build-md-exe hlw.md
+npx @drxiaozhi/minapk mdcui
+```
+
+> [!NOTE]
+> The built executable is always named `mdcui`, not `hlw`, so feeding it
+> straight to minapk produces `mdcui.apk`. Rename it with `mv` first.
+> (Don't reach for `--outfile` to rename it: that path is not resolved
+> against your cwd, and the file lands inside jsmdcui's own directory
+> instead.)
+
+`checkAns` is pure front-end answer checking; `whereAmI` calls into the
+`js back` block through `await rpc.sysinfo()` to report where the app is
+running. Run that same executable directly in Termux and it reports
+`(not inside an APK)`; install it as an APK and the very same button reports
+the real Buninu home and Android private data directory paths.
+
 ## Google Play distribution and policy
 
 > [!IMPORTANT]
-> An APK built by minapk is **not something you can publish as-is**. The three
+> An APK built by minapk is **not something you can publish as-is**. The two
 > points below are mechanical requirements, not matters of policy
 > interpretation -- uploading the current output to the Play Console gets
-> stopped on all three:
+> stopped on both:
 >
 > - **Format**: new apps have only been accepted as
 >   [Android App Bundles (AAB)](https://developer.android.com/guide/app-bundle/faq)
 >   since August 2021; minapk produces an APK.
-> - **Target API**:
->   [Play currently requires API 36 for new submissions and updates](https://support.google.com/googleplay/android-developer/answer/11926878)
->   (existing apps hit the API 35 floor on 2026-08-31), while this project's
->   `template/AndroidManifest.xml` is still `targetSdkVersion="34"`.
 > - **Signing**: new apps go through Play App Signing, where you hold only an
 >   upload key -- there is no way to keep using the shared
 >   `tools/debug.keystore` described under "APK signing and keytool" above.
 >
-> In other words, publishing requires at minimum switching to an AAB flow,
-> raising the target API, and moving to your own key. Only once all of that is
-> done does the murkier policy question below even come up.
+> In other words, publishing requires at minimum switching to an AAB flow and
+> moving to your own key. Only once all of that is done does the murkier
+> policy question below even come up.
 
 ### The policy side
 

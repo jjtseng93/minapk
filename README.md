@@ -274,16 +274,94 @@ tools/debug.keystore
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
+## 產生單一可執行檔
+
+以下兩條路徑都會產生 minapk 要的那種 elf——以 `/system/bin/linker64` 為載入器的 arm64 執行檔。兩者都需要 canary 版的 Bun：
+
+```sh
+bun upgrade --canary
+```
+
+### 途徑一：一行 `bun build`
+
+`hlw.js`：
+
+```js
+console.log("Hello from Bun single-file executable")
+```
+
+```sh
+bun build --format=esm --compile --minify --bytecode ./hlw.js
+npx @drxiaozhi/minapk hlw
+```
+
+得到 `hlw.apk`。輸出檔名不用指定，會自動去掉副檔名變成 `hlw`（Windows 上則是 `hlw.exe`）。
+
+### 途徑二：Markdown App
+
+`hlw.md`：
+
+````markdown
+#!/usr/bin/env jsmdcui
+
+## Question 問題
+- What is 1+2+3+4+..+..+∞
+
+```text#ans
+-1/12
+```
+- [Submit 提交](javascript:checkAns())
+- [Where am I? 我在哪？](javascript:whereAmI())
+
+```js front
+export function checkAns()
+{
+  if($('#ans').val().trim()=='-1/12')
+    $('#ans').val('答對🥳Right!');
+  else
+    $('#ans').val('答錯😫Wrong!');
+}
+
+export async function whereAmI()
+{
+  const r = await rpc.sysinfo();
+  alert(Object.entries(r).map(([k, v]) => `${k}: ${v}`).join('\n'));
+}
+```
+
+```js back
+export function sysinfo()
+{
+  return {
+    bun: Bun.version,
+    platform: process.platform,
+    arch: process.arch,
+    buninu: process.env.BUNINU_HOME ?? '(not under Buninu)',
+    android: process.env.PKG_DDIR ?? '(not inside an APK)',
+  };
+}
+```
+````
+
+```sh
+npx jsmdcui --build-md-exe hlw.md
+npx @drxiaozhi/minapk mdcui
+```
+
+> [!NOTE]
+> 輸出的執行檔固定叫 `mdcui`，不是 `hlw`，所以直接餵給 minapk 會得到 `mdcui.apk`。要別的名字就先 `mv`。（不要試圖用 `--outfile` 指定：它不是相對你的 cwd 解析的，檔案會跑到 jsmdcui 自己的目錄裡去。）
+
+`checkAns` 是純前端的答案比對；`whereAmI` 則透過 `await rpc.sysinfo()` 呼叫到 `js back` 區塊，回報這個 app 現在跑在哪裡。同一個執行檔在 Termux 裡直接跑會顯示 `(not inside an APK)`，包成 APK 裝起來之後，同樣那顆按鈕就會顯示 Buninu home 與 Android app 私有目錄的實際路徑。
+
 ## Google Play 上架與政策
 
 > [!IMPORTANT]
-> minapk 建出來的 APK **不是一個可以直接上架的成品**。以下三點是機制上的硬限制，跟政策解讀無關，照現況直接丟上 Play Console 就會被擋下來：
+> minapk 建出來的 APK **不是一個可以直接上架的成品**。以下兩點是機制上的硬限制，跟政策解讀無關，照現況直接丟上 Play Console 就會被擋下來：
 >
 > - **格式**：新 App 自 2021 年 8 月起只收 [Android App Bundle（AAB）](https://developer.android.com/guide/app-bundle/faq)，minapk 產出的是 APK。
-> - **target API**：[Play 目前要求新上架與更新為 API 36](https://support.google.com/googleplay/android-developer/answer/11926878)（既有 App 的 API 35 下限為 2026/8/31），本專案 `template/AndroidManifest.xml` 目前是 `targetSdkVersion="34"`。
 > - **簽章**：新 App 一律走 Play App Signing，你手上只留 upload key，不可能沿用上方「APK 簽章與 keytool」提到、所有人共用的那份 `tools/debug.keystore`。
 >
-> 換句話說，要上架至少得自行改用 AAB 流程、拉高 target API、換成自己的金鑰。這些都做完之後，才輪到下面比較沒有標準答案的政策問題。
+> 換句話說，要上架至少得自行改用 AAB 流程、換成自己的金鑰。這些都做完之後，才輪到下面比較沒有標準答案的政策問題。
 
 ### 政策面
 
