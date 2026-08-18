@@ -49,7 +49,7 @@ npx @drxiaozhi/minapk [/path/to/your.elf]
 
 1. 若有帶 elf 路徑，這次建置就用它當 `libmain.so` 打包（不會寫入專案根目錄，只影響這一次；不帶 elf 時使用專案根目錄現有的 `libmain.so`，見下方說明）。
 2. 準備 Buninu payload 與 manifest/資源/Java 原始碼，用 aapt2、ECJ、R8 編譯，封裝 Buninu payload 與原生函式庫，執行 zipalign，並用 `tools/debug.keystore` 簽章（不存在時自動建立），輸出到專案根目錄的 `<appname>.apk`（例如目前設定會是 `Hello2.apk`）。
-3. build 成功且有帶 elf 時，把輸出的 APK 複製一份到 elf 原本所在的目錄，檔名是 elf 本身的檔名（去掉副檔名，若原本就沒有副檔名也一樣正確處理）加上 `.apk`。例如 `myapp.elf` 旁邊會多一個 `myapp.apk`。
+3. build 成功後，把輸出的 APK 複製一份到**你目前的工作目錄（cwd）**：有帶 elf 時檔名是 elf 本身的檔名（去掉副檔名，若原本就沒有副檔名也一樣正確處理）加上 `.apk`，例如 `myapp.elf` 會產生 `myapp.apk`；沒帶 elf 時就是 `<appname>.apk`——例如照目前設定直接執行 `npx @drxiaozhi/minapk`（不帶任何參數），會在你執行指令當下的目錄產生 `Hello2.apk`。這一步是為了透過真正的 `npx`（套件裝在 npx 暫存快取，跟你的 cwd 是兩回事）執行時也拿得到成品；如果你的 cwd 剛好就是專案根目錄，這一步會自動跳過（APK 本來就已經在那裡了）。
 
 在有 checkout 的情況下也可以直接跑（效果相同）：
 
@@ -221,7 +221,14 @@ tools/debug.keystore
 
 如果這個檔案不存在，腳本才會呼叫 `keytool` 自動建立 debug keystore。之後的 build 與 repack 會持續使用同一個檔案簽章，因此更新已安裝的 APK 時請保留它。
 
-預設 debug keystore 適合本地測試；正式發佈時應改用你自己的 release keystore，並妥善備份私鑰與密碼。
+專案本身隨附一份現成的 `tools/debug.keystore`，刻意讓沒有 `keytool`（或整個 Java 環境）的環境也能完整跑完簽章這一步——末日生存情境下，能建置出可安裝的 APK 比什麼都重要。
+
+> [!WARNING]
+> 隨附的 `tools/debug.keystore` 是**所有沒有換掉它的使用者共用同一把私鑰**（密碼固定是 `android`），因為它透過 npm 公開發佈，任何人都拿得到。這代表：
+> - 用預設 keystore 簽出來的 APK，跟其他人用同一份預設 keystore 簽出來的 APK，是同一把金鑰簽的。
+> - 只要 package name 相同，任何人都能用這把公開金鑰重新簽署別的 APK，Android 會把它當成合法更新接受安裝。
+>
+> 只要環境裡有 `keytool`，刪掉 `tools/debug.keystore` 再重新建置一次，腳本就會自動幫你產生一把只有你自己有的新金鑰。正式發佈或給別人安裝之前，請務必這樣做一次，或改用你自己的 release keystore 並妥善備份私鑰與密碼。
 
 ## 螢幕按鍵列
 

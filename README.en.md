@@ -63,12 +63,17 @@ This is the main entry point; the whole process is driven by `index.js`:
    run zipalign, and sign with `tools/debug.keystore` (created automatically
    when absent), writing the result to the project root as `<appname>.apk`
    (for example, the current configuration produces `Hello2.apk`).
-3. On a successful build, copy that APK to the current working directory:
-   named after the elf (extension stripped, also handled correctly when the
-   elf has none) when one was given, otherwise named after `<appname>`. This
-   makes the result reachable even when running through a real `npx` install,
-   where the package itself lives in npx's ephemeral cache rather than
-   anywhere you'd find it afterwards.
+3. On a successful build, copy that APK to **the directory you ran the
+   command from (cwd)**: named after the elf (extension stripped, also
+   handled correctly when the elf has none) when one was given, otherwise
+   named after `<appname>` -- for example, running
+   `npx @drxiaozhi/minapk` with no arguments at all, with the current
+   configuration, produces `Hello2.apk` in whatever directory you ran it
+   from. This makes the result reachable even when running through a real
+   `npx` install, where the package itself lives in npx's ephemeral cache
+   rather than anywhere you'd find it afterwards; when your cwd already is
+   the project root, this step is skipped since the APK is already right
+   there.
 
 With a local checkout, this can also be run directly (same effect):
 
@@ -291,9 +296,26 @@ The scripts invoke `keytool` to create it only when it does not exist. Later
 builds and repacks continue signing with the same file, so retain it when
 updating an installed APK.
 
-The default debug keystore is suitable for local testing. Use your own release
-keystore for production distribution, and securely back up its private key and
-passwords.
+The project ships a ready-made `tools/debug.keystore` on purpose, so that even
+an environment without `keytool` (or without Java at all) can still complete
+signing and produce an installable APK -- in a doomsday-survival scenario,
+getting an installable APK out the door matters more than anything else.
+
+> [!WARNING]
+> The bundled `tools/debug.keystore` is **the same private key shared by every
+> user who hasn't replaced it** (password is the fixed `android`), because it
+> ships publicly through npm and anyone can get it. That means:
+> - An APK signed with the default keystore is signed with the exact same key
+>   as everyone else's default-keystore APK.
+> - Anyone can re-sign a different APK with that same public key, and as long
+>   as the package name matches, Android will accept it as a legitimate
+>   update.
+>
+> If `keytool` is available in your environment, delete `tools/debug.keystore`
+> and build once more -- the scripts will generate a fresh key that's yours
+> alone. Do this before any real release or before handing the APK to anyone
+> else, or switch to your own release keystore and back up its private key and
+> password securely.
 
 ## On-screen key bar
 
