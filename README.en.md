@@ -145,6 +145,19 @@ also accepts `"command": "a string"` as shorthand, applying it to every
 platform; minapk only ever builds Android, so there's no need to worry about
 how the `default`/`android`/`linux` sub-fields would otherwise merge).
 
+> [!WARNING]
+> Buninu's default `buninu.command.android` is:
+> ```sh
+> if command -v libmain.so >/dev/null 2>&1; then libmain.so; else printf ...; fi
+> ```
+> i.e. it detects `libmain.so` and launches it automatically. `-c` **replaces
+> the whole field**, it doesn't add to that logic -- so your elf (the one
+> packaged as `libmain.so` via the elf positional argument) **will not start automatically** unless
+> your own `command` explicitly invokes `libmain.so` (for example
+> `-c "libmain.so"`, or as part of your own logic). Forgetting this usually
+> shows up as: the APK builds fine, the app opens fine, but your program never
+> actually starts.
+
 `-c` **composes** with `--config` instead of being mutually exclusive with it:
 
 - With `--config`: the `--config` file's content is the base; `-c` only

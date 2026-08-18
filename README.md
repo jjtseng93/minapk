@@ -103,6 +103,13 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom startup command"
 
 `-c`/`--command <command>` 把封裝進 APK 的 `package.json` 裡的 `buninu.command` **整個欄位**覆蓋成這個字串（`buninu` 本身也接受 `"command": "字串"` 這種簡寫，等同套用到所有平台，minapk 只建置 Android 所以不用管 `default`/`android`/`linux` 這些子欄位怎麼合併）。
 
+> [!WARNING]
+> Buninu 預設的 `buninu.command.android` 是：
+> ```sh
+> if command -v libmain.so >/dev/null 2>&1; then libmain.so; else printf ...; fi
+> ```
+> 也就是偵測到 `libmain.so` 就自動啟動它。用 `-c` 是**整個欄位覆蓋**，不是在這段邏輯上加東西，所以你的 elf（透過 elf 位置參數打包成 `libmain.so` 的那個）**不會自動被執行**，除非你自訂的 `command` 裡自己有呼叫 `libmain.so`（例如 `-c "libmain.so"` 或包在你自己的邏輯裡）。忘記這件事最常見的症狀就是：APK 建置成功、App 也能開，但你的程式完全沒有啟動。
+
 `-c` 可以跟 `--config` **合併使用**而不是互斥：
 
 - 有帶 `--config`：以 `--config` 檔案的內容當底，`-c` 只覆蓋其中的 `buninu.command`，其他欄位維持 `--config` 檔案原樣。
