@@ -120,14 +120,71 @@ public class MainActivity extends Activity {
         + "document.body.appendChild(s);\n"
         + "})();";
 
-    // Live-applies as the zoom dialog's slider/number field change, same as
-    // ../hello's _applyZoom(): jsgotty's terminal is canvas/WebGL-rendered
-    // (started with --webgl by default), so WebSettings.setTextZoom() -- the
-    // native Android API -- would only affect real HTML text and do nothing
-    // to the terminal's own rendering. CSS zoom on the root element scales
-    // the whole rendered page, canvas included.
+    // Zooming by rewriting the viewport meta tag's width, which is what
+    // desktop Chrome's Ctrl+scroll actually does under the hood: it resizes
+    // the CSS layout viewport. Halve the viewport width and every CSS pixel
+    // covers twice as much screen, so text and images scale together *and*
+    // responsive layouts genuinely re-lay-out at the new width -- rather
+    // than being rescaled after the fact.
+    //
+    // None of the three native knobs manages all of that:
+    //
+    //   setTextZoom()      text only -- images keep their size, and content
+    //                      painted onto a <canvas> (jsgotty's terminal is
+    //                      exactly that) doesn't scale at all.
+    //   zoomBy()           page-scale, same as a pinch gesture: everything
+    //                      scales, but as a post-render rescale of the
+    //                      surface, so there is no reflow and the page has
+    //                      to be panned sideways to be read.
+    //   setInitialScale()  the same page scale, and only consulted when a
+    //                      page load starts, so nothing changes until the
+    //                      next navigation.
+    //
+    // Zooming far enough out also subsumes a separate "request desktop
+    // site" mode: a wide enough viewport is a desktop-width layout.
+    // WebSettings.setUseWideViewPort(true) (see onCreate) is what makes
+    // WebView honor the tag at all rather than always laying out at the
+    // WebView's own width.
+    //
+    // The baseline is captured from the page's natural layout width the
+    // first time this runs on a document, so zoom percentages stay relative
+    // to however that page would have laid itself out. It lives on the page
+    // and a navigation lands on a fresh document, hence re-applying from
+    // onPageFinished -- which also makes zoom apply to external pages
+    // opened through the menu's Go to URL.
+    private int lastZoomPercent = 100;
+
+    // 100% restores the page's own original viewport tag verbatim (removing
+    // the tag entirely if it never had one) rather than writing out
+    // width=<baseline>. A computed width is only an approximation of the
+    // original: real pages ship things like "width=device-width,
+    // initial-scale=1, viewport-fit=cover", and rewriting that as a bare
+    // pixel width silently drops every directive but the width -- so 100%
+    // would not actually be the unzoomed page.
     private static String zoomJs(int percent) {
-        return "document.documentElement.style.zoom='" + (percent / 100.0) + "'";
+        return "(function(){\n"
+            + "var m=document.querySelector('meta[name=\"viewport\"]');\n"
+            + "if(window.__buninuBaseViewport==null){\n"
+            + "window.__buninuBaseViewport=document.documentElement.clientWidth||360;\n"
+            + "window.__buninuBaseViewportContent=m?m.getAttribute('content'):null;\n"
+            + "}\n"
+            + "if(" + percent + "===100){\n"
+            + "if(window.__buninuBaseViewportContent==null){if(m)m.parentNode.removeChild(m);}\n"
+            + "else if(m)m.setAttribute('content',window.__buninuBaseViewportContent);\n"
+            + "return;\n"
+            + "}\n"
+            + "if(!m){m=document.createElement('meta');m.name='viewport';"
+            + "(document.head||document.documentElement).appendChild(m);}\n"
+            + "m.setAttribute('content','width='"
+            + "+Math.round(window.__buninuBaseViewport*100/" + percent + "));\n"
+            + "})();";
+    }
+
+    // Guards the divide in zoomJs: anything at or below zero would make the
+    // derived viewport width infinite or negative.
+    private void applyZoom(int percent) {
+        lastZoomPercent = percent > 0 ? percent : 100;
+        if (webView != null) webView.evaluateJavascript(zoomJs(lastZoomPercent), null);
     }
 
     private WebView webView;
@@ -175,10 +232,25 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
+        // Pinch-to-zoom, independent of the menu's own viewport-width zoom.
+        // DisplayZoomControls(false) keeps the gesture while suppressing the
+        // floating +/- overlay widget it otherwise shows.
+        webView.getSettings().setSupportZoom(true);
+        webView.getSettings().setBuiltInZoomControls(true);
+        webView.getSettings().setDisplayZoomControls(false);
+        // Required for the menu's zoom to work at all: without this, WebView
+        // ignores the viewport meta tag and always lays out at its own width.
+        // Overview mode then fits a wide layout on screen instead of showing
+        // only its top-left corner.
+        webView.getSettings().setUseWideViewPort(true);
+        webView.getSettings().setLoadWithOverviewMode(true);
         webView.addJavascriptInterface(new SzJsBridge(this), "AndroidSz");
         webView.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 view.evaluateJavascript(SZ_SAVE_TO_DISK_PATCH_JS, null);
+                // The viewport tag lives in the page, so a navigation resets
+                // it -- re-apply whatever the menu last set.
+                if (lastZoomPercent != 100) view.evaluateJavascript(zoomJs(lastZoomPercent), null);
             }
 
             // Only intercepts navigations the WebView itself initiates (link taps,
@@ -368,21 +440,29 @@ public class MainActivity extends Activity {
             .show();
     }
 
-    // 50%-300% in 10% steps, matching ../hello's slider (min 0.5, max 3.0,
-    // 25 divisions). The number field and the slider stay in sync with each
-    // other and both apply immediately, same live-preview behavior as the
-    // reference; there's no separate Apply button because there's nothing
-    // to commit -- see zoomJs()'s CSS-zoom note above.
+    // The slider covers 50%-300% in 10% steps (../hello's range: min 0.5,
+    // max 3.0, 25 divisions), which is the comfortable range to drag
+    // through -- but the number field is deliberately not limited to it,
+    // since typing an exact value is the whole reason it's there. Its own
+    // bounds come from the actual constraint instead: a viewport meta width
+    // is only valid from 1 to 10000 CSS px, and zoomJs() derives that width
+    // as base*100/percent, so percentages far outside the slider's range
+    // stay meaningful. Typing past the slider's ends just pins the slider
+    // there while still applying the typed value.
     private void showZoomDialog() {
         if (webView == null) return;
 
         final int min = 50, max = 300, step = 10;
+        final int typedMin = 5, typedMax = 2000;
+        // Start from whatever zoom is already in effect rather than assuming
+        // 100%, so reopening the dialog doesn't misreport the current state.
+        final int current = lastZoomPercent;
         final SeekBar seekBar = new SeekBar(this);
         seekBar.setMax((max - min) / step);
         final EditText number = new EditText(this);
         number.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        number.setText("100");
-        seekBar.setProgress((100 - min) / step);
+        number.setText(String.valueOf(current));
+        seekBar.setProgress((Math.max(min, Math.min(max, current)) - min) / step);
 
         final boolean[] syncing = { false };
 
@@ -393,13 +473,18 @@ public class MainActivity extends Activity {
                 try {
                     percent = Integer.parseInt(number.getText().toString().trim());
                 } catch (NumberFormatException e) {
-                    return;
+                    percent = 0; // empty field, or nothing parseable yet
                 }
-                percent = Math.max(min, Math.min(max, percent));
+                // Editing passes through transient falsy states -- a cleared
+                // field, or a leading "0" on the way to "50" -- and 0 would
+                // make zoomJs divide by zero for an infinite viewport width.
+                // Fall back to 100% for those rather than applying nonsense.
+                if (percent == 0) percent = 100;
+                else if (percent < typedMin || percent > typedMax) return;
                 syncing[0] = true;
-                seekBar.setProgress((percent - min) / step);
+                seekBar.setProgress((Math.max(min, Math.min(max, percent)) - min) / step);
                 syncing[0] = false;
-                webView.evaluateJavascript(zoomJs(percent), null);
+                applyZoom(percent);
             }
         };
 
@@ -410,7 +495,7 @@ public class MainActivity extends Activity {
                 syncing[0] = true;
                 number.setText(String.valueOf(percent));
                 syncing[0] = false;
-                webView.evaluateJavascript(zoomJs(percent), null);
+                applyZoom(percent);
             }
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}
@@ -435,11 +520,10 @@ public class MainActivity extends Activity {
         reset.setText("Reset to 100%");
         reset.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                syncing[0] = true;
+                // Deliberately not syncing/applying by hand: writing the
+                // field with the guard down runs the same TextWatcher path
+                // typing does, so reset cannot drift from it.
                 number.setText("100");
-                seekBar.setProgress((100 - min) / step);
-                syncing[0] = false;
-                webView.evaluateJavascript(zoomJs(100), null);
             }
         });
         column.addView(reset);
