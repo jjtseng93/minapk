@@ -372,10 +372,9 @@ There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
 The physical **Volume Up** button is intercepted (it never actually changes
-the volume) and opens a small menu instead: toggle the extra-keys bar, eval a
-JS snippet directly in the WebView, or show the current terminal screen's
-text in a popup -- handy for debugging or copying a large chunk of output on
-a phone.
+the volume) and opens a small menu instead: toggle the extra-keys bar, eval JS
+in the WebView, select terminal text, back/forward, go to a URL, zoom, Eruda
+console, and background permissions.
 
 ## Native clipboard support
 
