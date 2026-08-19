@@ -14,15 +14,22 @@
 ### Termux
 
 ```sh
-pkg install aapt aapt2 zip openjdk-21 nodejs npm
+pkg update
+pkg install aapt aapt2 zip unzip openjdk-21 nodejs npm
 npm install -g bun
+bun upgrade --canary
 ```
 
-### Debian / Ubuntu（apt）
+### Debian / Ubuntu（apt）arm64 inside Termux proot
 
 ```sh
-sudo apt install aapt zipalign zip openjdk-21-jdk-headless nodejs npm
-curl -fsSL https://bun.sh/install | bash
+apt update
+apt install aapt zipalign zip unzip openjdk-21-jdk-headless nodejs npm
+npm i -g @oven/bun-linux-aarch64-android --force
+export PATH=$(npm root -g)/@oven/bun-linux-aarch64-android/bin:$PATH
+bun upgrade --canary
+
+# when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
 
 ## 1. 應用程式名稱與 APK 名稱
