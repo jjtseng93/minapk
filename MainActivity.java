@@ -79,6 +79,26 @@ public class MainActivity extends Activity {
         + "};\n"
         + "})();";
 
+    // jsgotty's own static/index.html already defines a page-local
+    // alert_advanced(text, asHtml, closeOnClick) global (near-identical to
+    // ../ancinew's libds/webconsole.js version this was first ported from)
+    // -- call that directly instead of redefining the same dialog logic
+    // here, so it stays in sync with jsgotty's own copy automatically.
+    // getTerminalText() (gotty.js) reads straight from xterm.js's own
+    // buffer model rather than the rendered DOM -- necessary because jsgotty
+    // starts with --webgl by default, and a canvas/WebGL renderer paints
+    // glyphs onto a <canvas>, not real DOM text nodes, so a .xterm-screen
+    // innerText query would come back empty or unreliable under that
+    // renderer. Both existence checks guard the case where this page never
+    // loaded jsgotty's bundle at all.
+    private static final String ALERT_ADVANCED_JS =
+        "(function(){\n"
+        + "if(typeof window.alert_advanced!=='function')return;\n"
+        + "var text=typeof window.getTerminalText==='function'"
+        + "?window.getTerminalText():'(getTerminalText not found)';\n"
+        + "window.alert_advanced(text);\n"
+        + "})();";
+
     private WebView webView;
     private boolean urlLoaded = false;
     private String lastExternalUrl;
@@ -261,11 +281,12 @@ public class MainActivity extends Activity {
 
     private void showDebugMenu() {
         new AlertDialog.Builder(this)
-            .setItems(new String[]{"Toggle ctrl/alt/shift bar", "Eval in WebView"},
+            .setItems(new String[]{"Toggle ctrl/alt/shift bar", "Eval in WebView", "Show terminal text"},
                 new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface dialog, int which) {
                         if (which == 0) toggleExtraKeys();
-                        else showEvalDialog();
+                        else if (which == 1) showEvalDialog();
+                        else if (webView != null) webView.evaluateJavascript(ALERT_ADVANCED_JS, null);
                     }
                 })
             .show();
