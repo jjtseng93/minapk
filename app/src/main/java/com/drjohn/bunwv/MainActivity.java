@@ -1,7 +1,9 @@
 package com.drjohn.bunwv;
 
+import android.Manifest;
 import android.app.*;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.graphics.*;
@@ -12,6 +14,7 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.system.Os;
@@ -98,6 +101,34 @@ public class MainActivity extends Activity {
         + "?window.getTerminalText():'(getTerminalText not found)';\n"
         + "window.alert_advanced(text);\n"
         + "})();";
+
+    // Ported from ../hello's _toggleEruda(). webView has no native on-device
+    // devtools UI (only remote chrome://inspect debugging), so this injects
+    // eruda (github.com/liriliri/eruda) from a CDN on first use, then just
+    // shows/hides it on repeat use instead of re-injecting. Needs network.
+    private static final String ERUDA_TOGGLE_JS =
+        "(function(){\n"
+        + "function toggle(){\n"
+        + "if(window.__erudaShown){eruda.hide();window.__erudaShown=false;}\n"
+        + "else{eruda.show();window.__erudaShown=true;}\n"
+        + "}\n"
+        + "if(window.eruda){toggle();return;}\n"
+        + "var s=document.createElement('script');\n"
+        + "s.src='https://cdn.jsdelivr.net/npm/eruda';\n"
+        + "s.onload=function(){eruda.init();eruda.show();window.__erudaShown=true;};\n"
+        + "s.onerror=function(){alert('eruda load failed (need network)');};\n"
+        + "document.body.appendChild(s);\n"
+        + "})();";
+
+    // Live-applies as the zoom dialog's slider/number field change, same as
+    // ../hello's _applyZoom(): jsgotty's terminal is canvas/WebGL-rendered
+    // (started with --webgl by default), so WebSettings.setTextZoom() -- the
+    // native Android API -- would only affect real HTML text and do nothing
+    // to the terminal's own rendering. CSS zoom on the root element scales
+    // the whole rendered page, canvas included.
+    private static String zoomJs(int percent) {
+        return "document.documentElement.style.zoom='" + (percent / 100.0) + "'";
+    }
 
     private WebView webView;
     private boolean urlLoaded = false;
@@ -281,15 +312,219 @@ public class MainActivity extends Activity {
 
     private void showDebugMenu() {
         new AlertDialog.Builder(this)
-            .setItems(new String[]{"Toggle ctrl/alt/shift bar", "Eval in WebView", "Show terminal text"},
+            .setItems(new String[]{
+                    "Toggle ctrl/alt/shift bar", "Eval in WebView", "Select Terminal Text",
+                    "Back", "Forward", "Go to URL...", "Zoom...", "Eruda console",
+                    "Background permissions...",
+                },
                 new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface dialog, int which) {
-                        if (which == 0) toggleExtraKeys();
-                        else if (which == 1) showEvalDialog();
-                        else if (webView != null) webView.evaluateJavascript(ALERT_ADVANCED_JS, null);
+                        switch (which) {
+                            case 0: toggleExtraKeys(); break;
+                            case 1: showEvalDialog(); break;
+                            case 2:
+                                if (webView != null) webView.evaluateJavascript(ALERT_ADVANCED_JS, null);
+                                break;
+                            case 3:
+                                if (webView != null && webView.canGoBack()) webView.goBack();
+                                break;
+                            case 4:
+                                if (webView != null && webView.canGoForward()) webView.goForward();
+                                break;
+                            case 5: showGotoUrlDialog(); break;
+                            case 6: showZoomDialog(); break;
+                            case 7:
+                                if (webView != null) webView.evaluateJavascript(ERUDA_TOGGLE_JS, null);
+                                break;
+                            case 8: showBackgroundPermissionsDialog(); break;
+                        }
                     }
                 })
             .show();
+    }
+
+    private void showGotoUrlDialog() {
+        if (webView == null) return;
+        final EditText input = new EditText(this);
+        input.setHint("https://...");
+        String current = webView.getUrl();
+        if (current != null) {
+            input.setText(current);
+            input.setSelection(current.length());
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("Go to URL")
+            .setView(input)
+            .setPositiveButton("Go", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    // Always navigates, even back to the same URL -- loadUrl()
+                    // is a fresh navigation/reload regardless of what's
+                    // currently loaded, not a no-op guarded by URL equality.
+                    String url = input.getText().toString().trim();
+                    if (!url.isEmpty()) webView.loadUrl(url);
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    // 50%-300% in 10% steps, matching ../hello's slider (min 0.5, max 3.0,
+    // 25 divisions). The number field and the slider stay in sync with each
+    // other and both apply immediately, same live-preview behavior as the
+    // reference; there's no separate Apply button because there's nothing
+    // to commit -- see zoomJs()'s CSS-zoom note above.
+    private void showZoomDialog() {
+        if (webView == null) return;
+
+        final int min = 50, max = 300, step = 10;
+        final SeekBar seekBar = new SeekBar(this);
+        seekBar.setMax((max - min) / step);
+        final EditText number = new EditText(this);
+        number.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        number.setText("100");
+        seekBar.setProgress((100 - min) / step);
+
+        final boolean[] syncing = { false };
+
+        final Runnable applyFromNumber = new Runnable() {
+            @Override public void run() {
+                if (syncing[0]) return;
+                int percent;
+                try {
+                    percent = Integer.parseInt(number.getText().toString().trim());
+                } catch (NumberFormatException e) {
+                    return;
+                }
+                percent = Math.max(min, Math.min(max, percent));
+                syncing[0] = true;
+                seekBar.setProgress((percent - min) / step);
+                syncing[0] = false;
+                webView.evaluateJavascript(zoomJs(percent), null);
+            }
+        };
+
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                if (!fromUser || syncing[0]) return;
+                int percent = min + progress * step;
+                syncing[0] = true;
+                number.setText(String.valueOf(percent));
+                syncing[0] = false;
+                webView.evaluateJavascript(zoomJs(percent), null);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        number.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) { applyFromNumber.run(); }
+        });
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(48, 24, 48, 0);
+        number.setLayoutParams(new LinearLayout.LayoutParams(160, LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(number);
+        row.addView(seekBar, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.addView(row);
+        Button reset = new Button(this);
+        reset.setText("Reset to 100%");
+        reset.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                syncing[0] = true;
+                number.setText("100");
+                seekBar.setProgress((100 - min) / step);
+                syncing[0] = false;
+                webView.evaluateJavascript(zoomJs(100), null);
+            }
+        });
+        column.addView(reset);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Zoom")
+            .setView(column)
+            .setPositiveButton("Close", null)
+            .show();
+    }
+
+    // ------------------------------------------------ background permissions
+
+    private boolean hasNotifPermission() {
+        return Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isBatteryWhitelisted() {
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    private static final int REQUEST_NOTIF_PERMISSION = 1001;
+
+    // If the OS will no longer show the system dialog (denied before without
+    // "don't ask again" still being retractable), fall back to the app's own
+    // notification settings page so the user can still grant it from there.
+    private void requestNotifPermission() {
+        if (hasNotifPermission() || Build.VERSION.SDK_INT < 33) return;
+        SharedPreferences prefs = getSharedPreferences("gt", MODE_PRIVATE);
+        boolean asked = prefs.getBoolean("notif_asked", false);
+        boolean canPrompt = shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS);
+        if (!asked || canPrompt) {
+            prefs.edit().putBoolean("notif_asked", true).apply();
+            requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, REQUEST_NOTIF_PERMISSION);
+        } else {
+            Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+            try {
+                startActivity(i);
+            } catch (Exception e) {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+            }
+        }
+    }
+
+    private void requestBatteryWhitelist() {
+        if (isBatteryWhitelisted()) return;
+        try {
+            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (Exception e2) {
+                Toast.makeText(this, "no battery optimization settings page found", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    // Entirely optional/on-demand: nothing in minapk requires either
+    // permission, this just makes them reachable for whoever wants the app
+    // to keep running reliably in the background. Re-shows itself after
+    // each tap so the status labels reflect what just happened.
+    private void showBackgroundPermissionsDialog() {
+        String notifLabel = "Notifications: " + (hasNotifPermission() ? "granted" : "tap to request");
+        String batteryLabel = "Ignore battery optimization: " +
+            (isBatteryWhitelisted() ? "granted" : "tap to request");
+        new AlertDialog.Builder(this)
+            .setTitle("Background permissions")
+            .setItems(new String[]{ notifLabel, batteryLabel },
+                new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface dialog, int which) {
+                        if (which == 0) requestNotifPermission();
+                        else requestBatteryWhitelist();
+                    }
+                })
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     // For live-poking the WebView's JS state (e.g. typeof window.Zmodem)
