@@ -2,6 +2,8 @@ package com.drjohn.test1;
 
 import android.app.*;
 import android.content.*;
+import android.database.Cursor;
+import android.database.MatrixCursor;
 import android.graphics.*;
 import android.media.*;
 import android.net.LocalServerSocket;
@@ -9,6 +11,7 @@ import android.net.LocalSocket;
 import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.system.Os;
@@ -549,7 +552,8 @@ public class MainActivity extends Activity {
                 + "\"ttsStatus\":[\"handle\"],"
                 + "\"tts\":[\"handle\"],"
                 + "\"dltext\":[\"name\",\"text\"],"
-                + "\"dlbin\":[\"name\",\"base64\"]"
+                + "\"dlbin\":[\"name\",\"base64\"],"
+                + "\"xdgOpen\":[\"target\"]"
                 + "}";
         }
 
@@ -660,7 +664,155 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (func.equals("xdgOpen")) {
+            final String target = finalArgv.optString(0, "");
+            try {
+                boolean launched = xdgOpen(target);
+                return launched ? "true" : "false";
+            } catch (Exception e) {
+                return JSONObject.quote("error: " + e.getMessage());
+            }
+        }
+
         return JSONObject.quote("Unknown func 未知函式: " + func + "\r\n" + finalArgv.toString());
+    }
+
+    // A bare scheme:// prefix (http, https, mailto, market, ...) is handed
+    // straight to ACTION_VIEW for whatever app claims it -- same as tapping
+    // a link in the WebView (see shouldOverrideUrlLoading above). Anything
+    // else is treated as a path and must resolve, after following symlinks/
+    // .., to somewhere under Buninu's home; BuninuFileProvider below is the
+    // only way to hand another app a readable Uri for a file that otherwise
+    // lives in this app's private storage, since a raw file:// Uri triggers
+    // FileUriExposedException on modern Android and content:// requires a
+    // provider to back it.
+    private boolean xdgOpen(String target) throws Exception {
+        Uri uri;
+        String mimeType = null;
+        if (target.matches("^[a-zA-Z][a-zA-Z0-9+.\\-]*://.*")) {
+            uri = Uri.parse(target);
+        } else {
+            File homeDir = new File(getApplicationInfo().dataDir, "no_backup").getCanonicalFile();
+            // A relative path has to be resolved against Buninu's home, not
+            // this process's own cwd -- new File(target) alone would use
+            // this Java process's cwd, which has nothing to do with where
+            // the Bun side (whose cwd is genuinely home) resolved it from.
+            File rawFile = new File(target);
+            File file = (rawFile.isAbsolute() ? rawFile : new File(homeDir, target)).getCanonicalFile();
+            String homePrefix = homeDir.getPath() + File.separator;
+            if (!file.getPath().equals(homeDir.getPath()) && !file.getPath().startsWith(homePrefix)) {
+                throw new SecurityException("outside Buninu home: " + target);
+            }
+            if (!file.isFile()) {
+                throw new FileNotFoundException("not a file: " + target);
+            }
+            int dot = file.getName().lastIndexOf('.');
+            String ext = dot >= 0 ? file.getName().substring(dot + 1).toLowerCase() : "";
+            String guessed = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+            mimeType = guessed != null ? guessed : "application/octet-stream";
+            uri = new Uri.Builder()
+                .scheme("content")
+                .authority(getPackageName() + ".fileprovider")
+                .path(file.getAbsolutePath())
+                .build();
+        }
+
+        final Intent intent = new Intent(Intent.ACTION_VIEW);
+        if (mimeType != null) {
+            intent.setDataAndType(uri, mimeType);
+        } else {
+            intent.setData(uri);
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        final boolean[] launched = { false };
+        runOnMainThreadSync(new Callable<Object>() {
+            @Override public Object call() {
+                try {
+                    startActivity(intent);
+                    launched[0] = true;
+                } catch (ActivityNotFoundException e) {
+                    launched[0] = false;
+                }
+                return null;
+            }
+        });
+        return launched[0];
+    }
+
+    // Read-only, and only for files under Buninu's home (see xdgOpen) --
+    // exported=false in the manifest means only apps we explicitly grant a
+    // Uri to (via FLAG_GRANT_READ_URI_PERMISSION on the ACTION_VIEW intent)
+    // can reach this at all. Hand-rolled rather than androidx.core's
+    // FileProvider since this project has no AndroidX/Gradle dependencies.
+    public static class BuninuFileProvider extends ContentProvider {
+        @Override public boolean onCreate() {
+            return true;
+        }
+
+        private File resolve(Uri uri) throws FileNotFoundException {
+            String path = uri.getPath();
+            if (path == null) {
+                throw new FileNotFoundException("no path in uri: " + uri);
+            }
+            File file;
+            File homeDir;
+            try {
+                file = new File(path).getCanonicalFile();
+                homeDir = new File(getContext().getApplicationInfo().dataDir, "no_backup").getCanonicalFile();
+            } catch (IOException e) {
+                throw new FileNotFoundException(String.valueOf(e.getMessage()));
+            }
+            String homePrefix = homeDir.getPath() + File.separator;
+            if (!file.getPath().equals(homeDir.getPath()) && !file.getPath().startsWith(homePrefix)) {
+                throw new FileNotFoundException("outside Buninu home: " + path);
+            }
+            if (!file.isFile()) {
+                throw new FileNotFoundException("not a file: " + path);
+            }
+            return file;
+        }
+
+        @Override public Cursor query(Uri uri, String[] projection, String selection,
+                                       String[] selectionArgs, String sortOrder) {
+            File file;
+            try {
+                file = resolve(uri);
+            } catch (FileNotFoundException e) {
+                return null;
+            }
+            MatrixCursor cursor = new MatrixCursor(
+                new String[]{ OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE });
+            cursor.addRow(new Object[]{ file.getName(), file.length() });
+            return cursor;
+        }
+
+        @Override public String getType(Uri uri) {
+            String path = uri.getPath();
+            int dot = path != null ? path.lastIndexOf('.') : -1;
+            String ext = dot >= 0 ? path.substring(dot + 1).toLowerCase() : "";
+            String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+            return type != null ? type : "application/octet-stream";
+        }
+
+        @Override public Uri insert(Uri uri, ContentValues values) {
+            throw new UnsupportedOperationException("read-only provider");
+        }
+
+        @Override public int delete(Uri uri, String selection, String[] selectionArgs) {
+            throw new UnsupportedOperationException("read-only provider");
+        }
+
+        @Override public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+            throw new UnsupportedOperationException("read-only provider");
+        }
+
+        @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+            if (!"r".equals(mode)) {
+                throw new SecurityException("read-only provider, mode=" + mode);
+            }
+            return ParcelFileDescriptor.open(resolve(uri), ParcelFileDescriptor.MODE_READ_ONLY);
+        }
     }
 
     // Shared by dltext/dlbin. API 29+ goes through MediaStore.Downloads (no
