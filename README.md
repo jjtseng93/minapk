@@ -274,6 +274,8 @@ tools/debug.keystore
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
+實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡直接 eval 一段 JS、把目前終端機畫面文字用彈窗顯示出來——方便手機上除錯或複製一大段輸出。
+
 ## 原生剪貼簿支援
 
 App 內建一座從 Buninu 通到 Android 原生層的橋（`no_backup/apps/native-bridge`），透過 `MainActivity` 開的一個 unix socket，把 Toast 與系統剪貼簿讀寫暴露給 Buninu 裡跑的 Bun 行程。Buninu 隨附的 `xclip` 指令（`apps/xclip`）就是建在這座橋上：

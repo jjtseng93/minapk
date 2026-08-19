@@ -371,6 +371,12 @@ tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
+The physical **Volume Up** button is intercepted (it never actually changes
+the volume) and opens a small menu instead: toggle the extra-keys bar, eval a
+JS snippet directly in the WebView, or show the current terminal screen's
+text in a popup -- handy for debugging or copying a large chunk of output on
+a phone.
+
 ## Native clipboard support
 
 The app ships a bridge from Buninu to the Android native layer
