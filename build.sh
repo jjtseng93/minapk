@@ -40,6 +40,7 @@ RESET=$(printf '\033[0m')
 BOLD_CYAN=$(printf '\033[1;36m')
 BOLD_GREEN=$(printf '\033[1;32m')
 YELLOW=$(printf '\033[33m')
+PURPLE=$(printf '\033[35m')
 
 heading() {
   printf '%s%s%s\n' "$BOLD_CYAN" "$1" "$RESET"
@@ -47,6 +48,19 @@ heading() {
 
 progress() {
   printf '%s%s.%s %s%s%s\n' "$BOLD_GREEN" "$1" "$RESET" "$YELLOW" "$2" "$RESET"
+}
+
+# The Bun going into the APK is an Android arm64 executable loaded by
+# /system/bin/linker64, so it does not necessarily run on the machine doing
+# the build. Report its revision when it does run, and say so plainly when it
+# does not, rather than failing a build that is otherwise perfectly fine.
+bun_revision() {
+  bun_rev=$("$1" --revision 2>/dev/null | head -n 1)
+  if [ -n "$bun_rev" ]; then
+    printf '%s' "$bun_rev"
+  else
+    printf 'unknown (not runnable on this build host)'
+  fi
 }
 
 heading "Building $PKG_NAME APK → $app_name.apk"
@@ -190,6 +204,21 @@ cp "$BUNINU_TGZ" "$BUILD/assets/assets/buninu.tgz"
 cp "$BUNINU_STAMP" "$BUILD/assets/assets/buninu.stamp"
 (cd "$BUILD/assets" && zip -q -u "../apk_final/app-unsigned.apk" assets/buninu.tgz assets/buninu.stamp)
 
+# MINAPK_BUNBIN (set by index.js's -b/--bun-bin) replaces the packaged Bun
+# for good, unlike MINAPK_APPNAME/MINAPK_PKGNAME/MINAPK_LIBMAIN which only
+# apply to this run. That difference is deliberate: libbun.so is not a
+# checked-in file but a cache this script already writes on its own (it
+# copies `which bun` there whenever it is missing), so -b is just an explicit
+# way to refresh that cache instead of leaving the choice to PATH.
+if [ -n "$MINAPK_BUNBIN" ]; then
+  heading "Replacing libbun.so with: $MINAPK_BUNBIN"
+  if ! cp "$MINAPK_BUNBIN" "$sd/libbun.so"; then
+    echo "Failed to copy bun to: $sd/libbun.so" >&2
+    exit 1
+  fi
+  chmod 755 "$sd/libbun.so"
+fi
+
 if [ ! -f "$sd/libbun.so" ]; then
   bun_path=$(which bun 2>/dev/null)
   if [ -z "$bun_path" ] || [ ! -f "$bun_path" ]; then
@@ -204,6 +233,8 @@ if [ ! -f "$sd/libbun.so" ]; then
 fi
 
 progress 5b "Packaging native libraries..."
+printf '%sPackaged Bun (libbun.so) revision:%s\n' "$BOLD_GREEN" "$RESET"
+printf '  %s%s%s\n' "$PURPLE" "$(bun_revision "$sd/libbun.so")" "$RESET"
 mkdir -p "$BUILD/native_libs/lib/arm64-v8a"
 for native_lib in libbun.so libsh-loader.so libld-musl.so; do
   if [ -f "$sd/$native_lib" ]; then

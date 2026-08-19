@@ -95,7 +95,13 @@ bun ./index.js
 - 封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，會執行
 `which bun`，並將找到的 Bun 複製為根目錄的 `libbun.so`；找不到 Bun
 或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
-執行的版本。
+執行的版本。要明確指定用哪一份 Bun、而不是交給 `PATH` 決定，見第 4 節的
+`-b`/`--bun-bin`。
+
+- 封裝原生函式庫那一步（`5b`）會執行 `libbun.so --revision` 並印出結果，
+讓你知道這顆 APK 裡到底裝的是哪個版本的 Bun。因為 `libbun.so` 是
+Android arm64 執行檔，不見得能在建置用的機器上直接跑；跑不起來時只會印
+`unknown (not runnable on this build host)`，不會中斷建置。
 
 清除 `build/` 暫存資料夾：
 
@@ -154,7 +160,35 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
 
 `--no-shell` 不用帶值，出現就把 `buninu.exitAfterCmd` 設成 `true`（預設 `false`，見 [Buninu README](https://www.npmjs.com/package/buninu) 的 `exitAfterCmd` 說明）：`buninu.command` 執行完後直接結束，不會像預設那樣掉回互動式 shell。合併規則跟 `-c` 一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
 
-`-c`/`--no-shell`/`--config` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+### 用 `-b`/`--bun-bin` 指定要封裝進 APK 的 Bun
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -b /path/to/android-arm64/bun
+```
+
+`-b`/`--bun-bin <path>` 把指定的 Bun 執行檔複製成專案根目錄的 `libbun.so`，
+**取代**目前那一份，然後才開始建置。用來在不同版本的 Bun（例如 canary 與
+stable）之間切換，而不必自己去 `cp` 或去動 `PATH`。該 Bun 一樣必須是可在
+Android arm64 上執行的版本。
+
+> [!IMPORTANT]
+> 這個旗標跟 `-n`/`-p`/elf 位置參數**不一樣**：那三個只影響當次建置，磁碟上的
+> `appname.txt`/`pkgname.txt`/`libmain.so` 永遠不會被寫入；`-b` 則是真的把
+> `libbun.so` 覆蓋掉，之後不帶 `-b` 的建置也會繼續用這一份。
+>
+> 這是刻意的：`libbun.so` 本來就不是 checked-in 的檔案，而是 `build.sh` 自己
+> 會寫的快取（不存在時它會把 `which bun` 找到的 Bun 複製過去），所以 `-b`
+> 覆蓋掉的只是「上次從 `PATH` 撿來的那份」，沒有什麼可預期的預設值會被破壞。
+
+不論有沒有帶 `-b`，建置到 `5b` 那一步都會印出實際封裝進去的 Bun 版本：
+
+```text
+5b. Packaging native libraries...
+Packaged Bun (libbun.so) revision:
+  1.4.0-canary.1+41c3f6fdb
+```
+
+`-c`/`--no-shell`/`--config`/`-b` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell

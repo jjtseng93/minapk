@@ -29,6 +29,9 @@ Options:
                            interactive shell (composes with --config)
   -n, --appname <name>     Override the app/APK name for this build (default: appname.txt)
   -p, --pkgname <pkgname>  Override the Android package name for this build (default: pkgname.txt)
+  -b, --bun-bin <path>     Copy this Bun binary over libbun.so before building, replacing
+                           the Bun packaged into the APK (persistent, unlike the options
+                           above). Its revision is printed while packaging.
 
 Without a path to an elf, this builds using the project root's existing
 libmain.so (if any) and appname.txt/pkgname.txt as-is. On success, the
@@ -64,7 +67,7 @@ async function handleInformationArguments(arguments_) {
 }
 
 function parseArguments(argv) {
-  const result = { elf: null, configPath: null, command: null, noShell: false, appName: null, pkgName: null };
+  const result = { elf: null, configPath: null, command: null, noShell: false, appName: null, pkgName: null, bunBin: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--config") {
@@ -96,6 +99,13 @@ function parseArguments(argv) {
     } else if (argument.startsWith("--pkgname=")) {
       result.pkgName = argument.slice("--pkgname=".length);
       if (!result.pkgName) fail("--pkgname= requires a package name");
+    } else if (argument === "-b" || argument === "--bun-bin") {
+      result.bunBin = argv[index + 1];
+      if (!result.bunBin) fail("-b/--bun-bin requires a path to a bun binary");
+      index += 1;
+    } else if (argument.startsWith("--bun-bin=")) {
+      result.bunBin = argument.slice("--bun-bin=".length);
+      if (!result.bunBin) fail("--bun-bin= requires a path to a bun binary");
     } else if (!result.elf && !argument.startsWith("-")) {
       result.elf = argument;
     }
@@ -114,6 +124,19 @@ function resolveElfPath(elfArgument) {
   const elfPath = isAbsolute(elfArgument) ? elfArgument : resolve(process.cwd(), elfArgument);
   if (!existsSync(elfPath)) fail(`elf not found: ${elfPath}`);
   return elfPath;
+}
+
+// Unlike resolveElfPath above, the resolved path really is copied over the
+// project root's libbun.so by build.sh, and stays there for later builds.
+// That is intentional rather than an inconsistency: libbun.so is already a
+// cache build.sh writes to by itself (it copies whatever `which bun` finds
+// there when the file is missing), never a checked-in file, so there is no
+// predictable default for -b to clobber -- it only replaces a value that was
+// picked up from PATH in the first place.
+function resolveBunBinPath(bunBinArgument) {
+  const bunBinPath = isAbsolute(bunBinArgument) ? bunBinArgument : resolve(process.cwd(), bunBinArgument);
+  if (!existsSync(bunBinPath)) fail(`bun binary not found: ${bunBinPath}`);
+  return bunBinPath;
 }
 
 // appName is the resolved value build.sh actually built with (the -n
@@ -265,8 +288,9 @@ async function applyPackagePatch(tgzPath, { configPath, command, noShell }) {
 
 if (await handleInformationArguments(process.argv.slice(2))) process.exit(0);
 
-const { elf: elfArgument, configPath, command, noShell, appName, pkgName } = parseArguments(process.argv.slice(2));
+const { elf: elfArgument, configPath, command, noShell, appName, pkgName, bunBin } = parseArguments(process.argv.slice(2));
 const elfPath = elfArgument ? resolveElfPath(elfArgument) : null;
+const bunBinPath = bunBin ? resolveBunBinPath(bunBin) : null;
 
 const buildScript = resolve(rootDir, "build.sh");
 if (!existsSync(buildScript)) fail(`build script not found: ${buildScript}`);
@@ -283,11 +307,14 @@ if (configPath || command !== null || noShell) {
 // MINAPK_PKGNAME/MINAPK_LIBMAIN as overrides for this run only. Never
 // mutating those checked-in files means a plain run without -n/-p/elf always
 // builds from the same predictable defaults, regardless of what any earlier
-// invocation passed.
+// invocation passed. -b/--bun-bin goes through the same env-var channel but
+// is deliberately not one of these run-only overrides: build.sh copies it
+// over libbun.so for good (see resolveBunBinPath).
 const childEnvironment = { ...process.env };
 if (appName) childEnvironment.MINAPK_APPNAME = appName;
 if (pkgName) childEnvironment.MINAPK_PKGNAME = pkgName;
 if (elfPath) childEnvironment.MINAPK_LIBMAIN = elfPath;
+if (bunBinPath) childEnvironment.MINAPK_BUNBIN = bunBinPath;
 
 const child = Bun.spawn(["/bin/sh", buildScript, ...buildArguments], {
   cwd: rootDir,

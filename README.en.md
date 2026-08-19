@@ -126,7 +126,14 @@ internally; it is a POSIX shell script and needs a `/bin/sh` (or Android's
 - Before packaging native libraries, if `libbun.so` is missing from the project
 root, the build runs `which bun` and copies the discovered Bun to
 `./libbun.so`. The build stops if Bun cannot be found or copied. That Bun must
-be executable on the target Android arm64 environment. 
+be executable on the target Android arm64 environment. To name the Bun to use
+explicitly instead of letting `PATH` decide, see `-b`/`--bun-bin` in section 4.
+
+- The native-library packaging step (`5b`) runs `libbun.so --revision` and
+prints the result, so you can tell which Bun this particular APK ships.
+`libbun.so` is an Android arm64 executable and does not necessarily run on the
+machine doing the build; when it doesn't, the step prints
+`unknown (not runnable on this build host)` instead of failing the build.
 
 Remove the `build/` scratch folder:
 
@@ -221,8 +228,39 @@ back to an interactive shell like the default does. It composes the same way
 `-c` does -- layered on top of `--config` when given, or on top of this run's
 freshly exported `package.json` otherwise, leaving every other field alone.
 
-`-c`/`--no-shell`/`--config` can be combined freely with `-n`/`-p` (sections 1
-and 2) and the elf positional argument, for example:
+### Choose the Bun packaged into the APK with `-b`/`--bun-bin`
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf -b /path/to/android-arm64/bun
+```
+
+`-b`/`--bun-bin <path>` copies the given Bun executable over the project
+root's `libbun.so`, **replacing** the current one, and then starts the build.
+Use it to switch between Bun versions (canary vs. stable, say) without
+copying files around or rearranging `PATH` yourself. That Bun must be
+executable on Android arm64, same as before.
+
+> [!IMPORTANT]
+> This flag behaves **differently** from `-n`/`-p`/the elf positional
+> argument: those three apply to a single build and never write to
+> `appname.txt`/`pkgname.txt`/`libmain.so` on disk, whereas `-b` really does
+> overwrite `libbun.so`, and later builds without `-b` keep using it.
+>
+> That is deliberate: `libbun.so` is not a checked-in file but a cache
+> `build.sh` writes on its own (it copies whatever `which bun` finds there
+> when the file is missing), so all `-b` replaces is "whatever was picked up
+> from `PATH` last time" -- there is no predictable default to clobber.
+
+With or without `-b`, step `5b` prints the Bun revision actually packaged:
+
+```text
+5b. Packaging native libraries...
+Packaged Bun (libbun.so) revision:
+  1.4.0-canary.1+41c3f6fdb
+```
+
+`-c`/`--no-shell`/`--config`/`-b` can be combined freely with `-n`/`-p`
+(sections 1 and 2) and the elf positional argument, for example:
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
