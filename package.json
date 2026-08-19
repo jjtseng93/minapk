@@ -1,6 +1,6 @@
 {
   "name": "@drxiaozhi/minapk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Build Android APKs from Bun Single-file executables or source code",
   "license": "MIT",
   "author": "Dr. John (醫者小智)",
