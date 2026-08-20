@@ -248,9 +248,11 @@ npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
 
 `--no-back-to-console` takes no value; its presence sets
 `buninu.backToConsole` to `false` (default `true`): with the app WebView in
-front and no page of its own left to go back to, the back key follows
-Android's own default and leaves the app instead of switching back to the
-console WebView. It composes exactly like `-c` and `--no-shell` -- layered on
+front and no page of its own left to go back to, the back key takes the
+leave-the-app path instead of switching back to the console WebView. Leaving
+still goes through the confirmation dialog, whichever WebView it was pressed
+in: this field only decides whether the console is visited on the way, never
+whether leaving is confirmed. It composes exactly like `-c` and `--no-shell` -- layered on
 top of `--config` when given, or on top of this run's freshly exported
 `package.json` otherwise, leaving every other field alone.
 
@@ -467,6 +469,14 @@ the app (that is `buninu.backToConsole`, default `true`; see
 the front keeps running exactly as it was. Switch from the volume menu's last
 entry, which switches on the tap itself rather than asking which one, or from
 Buninu with `showWebView` below.
+
+The step where back really would leave the app (the console, with nothing left
+to go back to) asks for confirmation first. Confirming does more than close the
+screen: the Buninu process and the native bridge's socket are torn down and the
+app process ends, so the next launch is a genuinely fresh one. Buninu is
+started as `bun --no-orphans`, so jsgotty and the shell it spawned go with it
+rather than being left behind as orphans; the same flag also makes Buninu exit
+on its own if the system kills the app process.
 
 ## Native clipboard support
 

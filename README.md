@@ -177,7 +177,7 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
 npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
 ```
 
-`--no-back-to-console` 不用帶值，出現就把 `buninu.backToConsole` 設成 `false`（預設 `true`）：在 app WebView 而且它自己沒有上一頁可回時，按返回鍵會照 Android 預設行為離開 App，而不是切回 console WebView。合併規則跟 `-c`／`--no-shell` 完全一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
+`--no-back-to-console` 不用帶值，出現就把 `buninu.backToConsole` 設成 `false`（預設 `true`）：在 app WebView 而且它自己沒有上一頁可回時，按返回鍵會走離開 App 那條路，而不是切回 console WebView。「離開」在哪個 WebView 按都一樣要先過確認對話框——這個欄位只決定要不要先繞去 console，不會讓返回鍵變成不問就直接退出。合併規則跟 `-c`／`--no-shell` 完全一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
 
 這個欄位是**由 Android 端的 App 讀的**，不是 Buninu 自己讀的，所以在 APK 以外的地方設它不會有任何效果。App 端讀不到檔案、JSON 壞掉、沒有這個欄位、值不是布林，一律當成 `true`（回到 console），不會因此丟出任何錯誤。
 
@@ -339,6 +339,8 @@ CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按�
 實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡 eval JS、選取終端機文字、上一頁／下一頁、跳到指定網址、縮放、Eruda console、背景權限設定、切換 WebView（直接切到下一個，不再多一層選單；項目本身會標出要切去哪一個，例如 `Switch WebView → 1: app`）。
 
 App 裡有兩個 WebView，從啟動就都存在、不會被建立或關閉：`0` 是 console（Buninu 起的 jsgotty 終端機），`1` 是 app WebView，一開始是空白的、擺在後面。按鍵列、音量鍵選單、返回鍵一律作用在**當前在前景的那一個** WebView 上，所以切換 WebView 就等於同時把這三者換過去。在 app WebView 沒有上一頁可回時按返回鍵，會切回 console 而不是結束 App——沒有任何東西被關掉，離開前景的那個 WebView 照樣繼續跑（這個行為由 `buninu.backToConsole` 決定，預設 `true`，見 `--no-back-to-console`）。切換的方式是音量鍵選單最後那個「Switch WebView →」項目（按下去就直接切，不會再問你要哪一個），或從 Buninu 裡呼叫下面的 `showWebView`。
+
+返回鍵真的會離開 App 的那一步（console 也沒有上一頁可回時）會先跳出確認對話框。確認離開之後不只是關掉畫面：Buninu 行程、native bridge 的 socket 都會收掉，整個 App 行程結束，下次開啟是全新的一份。Buninu 是用 `bun --no-orphans` 啟動的，所以它自己 spawn 出去的 jsgotty、shell 也會跟著一起結束，不會留下孤兒行程；同一個旗標也讓 Buninu 在 App 行程被系統殺掉時自行退出。
 
 ## 原生剪貼簿支援
 
