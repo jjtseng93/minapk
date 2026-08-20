@@ -27,6 +27,8 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.*;
 import android.widget.*;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import java.io.*;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -292,6 +294,7 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         setContentView(root);
         applyWindowInsets(root);
+        registerBackHandler();
 
         startBunProcess();
     }
@@ -1849,23 +1852,69 @@ public class MainActivity extends Activity {
         return line.substring(start, end);
     }
 
-    @Override public void onBackPressed() {
+    // What a back press should do, independent of which of the two ways
+    // Android delivered it (see registerBackHandler). Returns true when it was
+    // handled here, false to mean "let the platform do its usual thing".
+    //
+    // Back out of the app WebView is a switch, not a close: it stays loaded
+    // and running behind the console, exactly as the volume menu's Switch
+    // WebView would leave it. Only the console with nothing left to go back to
+    // gives the press back to the platform -- as does the app WebView too when
+    // buninu.backToConsole is false, which is how an app that wants back to
+    // mean "leave" gets it.
+    private boolean handleBack() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
-        } else if (backToConsole
-                   && currentWebViewId != CONSOLE_WEBVIEW_ID
-                   && webViews.containsKey(Integer.valueOf(CONSOLE_WEBVIEW_ID))) {
-            // Back out of the app WebView is a switch, not a close: it stays
-            // loaded and running behind the console, exactly as the volume
-            // menu's Switch WebView would leave it. Only the console with
-            // nothing left to go back to falls through to the system's own
-            // back behavior -- as does the app WebView too when
-            // buninu.backToConsole is false, which is how an app that wants
-            // back to mean "leave" gets it.
-            showWebView(CONSOLE_WEBVIEW_ID);
-        } else {
-            super.onBackPressed();
+            return true;
         }
+        if (backToConsole
+            && currentWebViewId != CONSOLE_WEBVIEW_ID
+            && webViews.containsKey(Integer.valueOf(CONSOLE_WEBVIEW_ID))) {
+            showWebView(CONSOLE_WEBVIEW_ID);
+            return true;
+        }
+        return false;
+    }
+
+    // Android 13 (API 33) introduced OnBackInvokedCallback, and from Android
+    // 15 on it is not optional for an app like this one: predictive back
+    // defaults to *enabled* for anything targeting API 35+ (this app targets
+    // 36, see AndroidManifest.xml), and once it is enabled the system stops
+    // calling Activity.onBackPressed() entirely and dispatches here instead.
+    // Without this registration every back press on a modern device just
+    // finishes the Activity -- no WebView history, no switch back to the
+    // console -- because the override below is never reached at all.
+    //
+    // API 32 and older have no dispatcher and keep using onBackPressed.
+    private void registerBackHandler() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            BackInvokedRegistrar.register(this);
+        }
+    }
+
+    // Kept in its own class so the API 33 types it names are only resolved on
+    // a device that actually has them: ART resolves a class's references when
+    // that class is first used, and minSdkVersion here is 26. A version check
+    // around an inline registration would still drag them into MainActivity's
+    // own constant pool.
+    private static class BackInvokedRegistrar {
+        static void register(final MainActivity activity) {
+            activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                new OnBackInvokedCallback() {
+                    @Override public void onBackInvoked() {
+                        // Registering a callback means nothing else handles
+                        // the press any more, so the unhandled case has to
+                        // finish the Activity itself -- there is no
+                        // super.onBackPressed() to fall through to here.
+                        if (!activity.handleBack()) activity.finish();
+                    }
+                });
+        }
+    }
+
+    @Override public void onBackPressed() {
+        if (!handleBack()) super.onBackPressed();
     }
 
     @Override protected void onPause() {
