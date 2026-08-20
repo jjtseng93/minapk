@@ -228,6 +228,26 @@ back to an interactive shell like the default does. It composes the same way
 `-c` does -- layered on top of `--config` when given, or on top of this run's
 freshly exported `package.json` otherwise, leaving every other field alone.
 
+### Leave the app on back with `--no-back-to-console`
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
+```
+
+`--no-back-to-console` takes no value; its presence sets
+`buninu.backToConsole` to `false` (default `true`): with the app WebView in
+front and no page of its own left to go back to, the back key follows
+Android's own default and leaves the app instead of switching back to the
+console WebView. It composes exactly like `-c` and `--no-shell` -- layered on
+top of `--config` when given, or on top of this run's freshly exported
+`package.json` otherwise, leaving every other field alone.
+
+This field is read by **the Android app**, not by Buninu itself, so setting it
+anywhere outside an APK does nothing. A file the app cannot read, broken JSON,
+a missing field, or a non-boolean value are all treated as `true` (back
+returns to the console), so nothing about it can fail in a way that leaves the
+back key broken.
+
 ### Choose the Bun packaged into the APK with `-b`/`--bun-bin`
 
 ```sh
@@ -259,7 +279,8 @@ Packaged Bun (libbun.so) revision:
   1.4.0-canary.1+41c3f6fdb
 ```
 
-`-c`/`--no-shell`/`--config`/`-b` can be combined freely with `-n`/`-p`
+`-c`/`--no-shell`/`--no-back-to-console`/`--config`/`-b` can be combined
+freely with `-n`/`-p`
 (sections 1 and 2) and the elf positional argument, for example:
 
 ```sh
@@ -419,7 +440,21 @@ that brings up the system IME to type or paste text directly.
 The physical **Volume Up** button is intercepted (it never actually changes
 the volume) and opens a small menu instead: toggle the extra-keys bar, eval JS
 in the WebView, select terminal text, back/forward, go to a URL, zoom, Eruda
-console, and background permissions.
+console, background permissions, and switch WebView -- the last one switches
+straight away instead of opening a picker, and names where it is going (for
+example `Switch WebView -> 1: app`).
+
+The app has two WebViews, both alive from startup and neither ever created nor
+closed: `0` is the console (the jsgotty terminal Buninu starts) and `1` is the
+app WebView, which begins blank and behind. The extra-keys bar, the volume-key
+menu and the back key all act on **whichever WebView is in front**, so
+switching WebViews moves all three at once. Pressing back on the app WebView
+when it has no page to go back to switches to the console rather than leaving
+the app (that is `buninu.backToConsole`, default `true`; see
+`--no-back-to-console`) -- nothing is ever closed, and the WebView leaving
+the front keeps running exactly as it was. Switch from the volume menu's last
+entry, which switches on the tap itself rather than asking which one, or from
+Buninu with `showWebView` below.
 
 ## Native clipboard support
 
@@ -447,6 +482,52 @@ toast, clipboardRead, clipboardWrite } from` that path inside a `js back`
 block; every call times out after 5 seconds by default, so an unresponsive
 Android side can never hang the caller. See the "Commands inside the shell"
 section of `no_backup/README.md` for the full API.
+
+`xdg-open` hands a URL to the system's default handler by default (which
+means leaving the app); setting `MINAPK_WEBVIEW=<id>` loads it into that
+WebView and brings it to the front instead:
+
+```sh
+MINAPK_WEBVIEW=1 xdg-open https://example.com   # in the app WebView, on screen
+export MINAPK_WEBVIEW=1                         # ...or for the whole session
+```
+
+`0` is the console, so it navigates the terminal page away (the back key
+returns to it and jsgotty reconnects, but it is rarely what you want); `-1` is
+whichever WebView is in front. Only URLs are redirected -- a file path always
+goes to the system handler, since WebView cannot read a `file://` URL under
+Buninu's home (`setAllowFileAccess` is false from API 30 on) while the native
+side already serves that file through its content:// provider. A value that is
+not a plain integer is reported on stderr and ignored rather than guessed at,
+unset or empty keeps the default behavior, and a WebView that does not exist
+falls back to the system handler after saying so.
+
+The same bridge hands those two WebViews to Buninu through four functions:
+`openWebView(id, url)`, `evalWebView(id, js)`, `showWebView(id)` and
+`currWebView()`. An id of `-1` means whichever WebView is in front.
+
+Each also answers to a short `openwv`/`evalwv`/`showwv`/`currwv` spelling, on
+the same terms as the clipboard's `getcb`/`setcb`: the Java side accepts either
+and lists both in `_discover`, so the CLI, `rpcraw`, and `import` all take
+either name.
+
+```sh
+native-bridge openwv 1 https://example.com   # load it, screen unchanged
+native-bridge showwv 1                       # now bring it to the front
+native-bridge evalwv 1 document.title
+native-bridge currwv
+```
+
+`openWebView` **loads without switching**, so "the user keeps looking at the
+terminal while the app WebView's page loads behind it" is a single call;
+`showWebView` is the only thing that changes what is on screen, and
+`showWebView -1` switches to the next WebView instead of being a no-op (a
+toggle, with two of them). `evalWebView` returns the value the expression
+actually produced -- a number/string/object, not a string containing one --
+while `undefined`, a function, and a thrown exception all arrive as `null`,
+since WebView itself does not distinguish them. The same four functions can be
+`import`ed into a `js back` block, along with the `WEBVIEW_CURRENT`,
+`WEBVIEW_CONSOLE` and `WEBVIEW_APP` constants.
 
 The same bridge also covers Text-To-Speech(tts): `tts "hello"` speaks text and waits for
 it to finish, `-a` returns immediately instead. Without the app it falls

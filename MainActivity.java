@@ -31,6 +31,8 @@ import java.io.*;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -152,7 +154,12 @@ public class MainActivity extends Activity {
     // and a navigation lands on a fresh document, hence re-applying from
     // onPageFinished -- which also makes zoom apply to external pages
     // opened through the menu's Go to URL.
-    private int lastZoomPercent = 100;
+    //
+    // Kept per WebView rather than as one app-wide percentage: the console
+    // and the app WebView show unrelated pages, so a zoom picked for one
+    // must not be reported by the zoom dialog -- or re-applied on
+    // navigation -- for the other.
+    private final Map<WebView, Integer> webViewZoom = new HashMap<>();
 
     // 100% restores the page's own original viewport tag verbatim (removing
     // the tag entirely if it never had one) rather than writing out
@@ -183,11 +190,49 @@ public class MainActivity extends Activity {
     // Guards the divide in zoomJs: anything at or below zero would make the
     // derived viewport width infinite or negative.
     private void applyZoom(int percent) {
-        lastZoomPercent = percent > 0 ? percent : 100;
-        if (webView != null) webView.evaluateJavascript(zoomJs(lastZoomPercent), null);
+        if (webView == null) return;
+        int applied = percent > 0 ? percent : 100;
+        webViewZoom.put(webView, Integer.valueOf(applied));
+        webView.evaluateJavascript(zoomJs(applied), null);
     }
 
+    private int zoomPercentOf(WebView view) {
+        Integer percent = webViewZoom.get(view);
+        return percent != null ? percent.intValue() : 100;
+    }
+
+    // ---- WebViews ----
+    // id 0 is the console: the jsgotty terminal Buninu itself starts, and the
+    // one every existing feature (extra-keys bar, volume menu, back key) was
+    // written against. id 1 is the app WebView. Both are created in onCreate
+    // and live for the whole life of the app -- nothing here is ever created
+    // on demand or closed, so an id either exists from startup or does not
+    // exist at all.
+    //
+    // webView keeps its original meaning of "the WebView the user is looking
+    // at and typing into", now as a pointer into webViews rather than the
+    // only one there is. That is what makes the extra-keys bar, the volume
+    // menu and the back key follow the current WebView without any of them
+    // knowing this registry exists: they all act on this one field.
+    private static final int CONSOLE_WEBVIEW_ID = 0;
+    private static final int APP_WEBVIEW_ID = 1;
+
     private WebView webView;
+    private FrameLayout webContainer;
+    private final Map<Integer, WebView> webViews = new LinkedHashMap<>();
+    // Read from the bridge's per-connection threads (currWebView), written on
+    // the main thread; every other access to the registry itself stays on the
+    // main thread via runOnMainThreadSync.
+    private volatile int currentWebViewId = CONSOLE_WEBVIEW_ID;
+
+    // buninu.backToConsole in the payload's package.json -- the same file
+    // buninu.command and buninu.exitAfterCmd live in -- decides what the back
+    // key does on the app WebView once it has no page of its own left to go
+    // back to: switch to the console (true, the default) or fall through to
+    // the system's own back behavior and leave the app (false). Read once at
+    // startup; see readBackToConsole for why nothing here can fail.
+    private volatile boolean backToConsole = true;
+
     private boolean urlLoaded = false;
     private String lastExternalUrl;
     private long lastExternalUrlAt;
@@ -229,28 +274,56 @@ public class MainActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
 
-        webView = new WebView(this);
-        webView.getSettings().setJavaScriptEnabled(true);
-        webView.getSettings().setDomStorageEnabled(true);
+        // Background WebViews are INVISIBLE rather than GONE so they are still
+        // laid out at full size: a page loading behind the front one then gets
+        // a real viewport instead of a 0x0 one, which is the whole point of
+        // openWebView() being a background load.
+        webContainer = new FrameLayout(this);
+        webView = createWebView(CONSOLE_WEBVIEW_ID);
+        createWebView(APP_WEBVIEW_ID);
+
+        extraKeysBar = buildExtraKeysBar();
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.addView(webContainer, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(extraKeysBar, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        setContentView(root);
+        applyWindowInsets(root);
+
+        startBunProcess();
+    }
+
+    // Every WebView the app has is built here, so the app WebView behaves
+    // exactly like the console one: same settings, same AndroidSz bridge for
+    // sz downloads, same external-link handling, same file chooser for rz
+    // uploads. Main thread only.
+    private WebView createWebView(int id) {
+        final WebView wv = new WebView(this);
+        wv.getSettings().setJavaScriptEnabled(true);
+        wv.getSettings().setDomStorageEnabled(true);
         // Pinch-to-zoom, independent of the menu's own viewport-width zoom.
         // DisplayZoomControls(false) keeps the gesture while suppressing the
         // floating +/- overlay widget it otherwise shows.
-        webView.getSettings().setSupportZoom(true);
-        webView.getSettings().setBuiltInZoomControls(true);
-        webView.getSettings().setDisplayZoomControls(false);
+        wv.getSettings().setSupportZoom(true);
+        wv.getSettings().setBuiltInZoomControls(true);
+        wv.getSettings().setDisplayZoomControls(false);
         // Required for the menu's zoom to work at all: without this, WebView
         // ignores the viewport meta tag and always lays out at its own width.
         // Overview mode then fits a wide layout on screen instead of showing
         // only its top-left corner.
-        webView.getSettings().setUseWideViewPort(true);
-        webView.getSettings().setLoadWithOverviewMode(true);
-        webView.addJavascriptInterface(new SzJsBridge(this), "AndroidSz");
-        webView.setWebViewClient(new WebViewClient() {
+        wv.getSettings().setUseWideViewPort(true);
+        wv.getSettings().setLoadWithOverviewMode(true);
+        wv.addJavascriptInterface(new SzJsBridge(this), "AndroidSz");
+        wv.setWebViewClient(new WebViewClient() {
             @Override public void onPageFinished(WebView view, String url) {
                 view.evaluateJavascript(SZ_SAVE_TO_DISK_PATCH_JS, null);
                 // The viewport tag lives in the page, so a navigation resets
                 // it -- re-apply whatever the menu last set.
-                if (lastZoomPercent != 100) view.evaluateJavascript(zoomJs(lastZoomPercent), null);
+                int percent = zoomPercentOf(view);
+                if (percent != 100) view.evaluateJavascript(zoomJs(percent), null);
             }
 
             // Only intercepts navigations the WebView itself initiates (link taps,
@@ -295,7 +368,7 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
-        webView.setWebChromeClient(new WebChromeClient() {
+        wv.setWebChromeClient(new WebChromeClient() {
             // jsgotty's browser client uses a real <input type="file"> for rz
             // uploads; without a WebChromeClient the tap on it does nothing
             // at all (no picker, no error) because there's no host to route
@@ -321,19 +394,65 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+        webViews.put(Integer.valueOf(id), wv);
+        webContainer.addView(wv, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        wv.setVisibility(id == currentWebViewId ? View.VISIBLE : View.INVISIBLE);
+        return wv;
+    }
 
-        extraKeysBar = buildExtraKeysBar();
+    // -1 means "whichever WebView is in front right now" for every bridge
+    // function that takes an id -- except showWebView, where switching to the
+    // one already in front would be a no-op, so there it means "switch to the
+    // next one" (see showWebView). Returns null for an id that does not
+    // exist, since ids are fixed at startup rather than allocated on demand.
+    private WebView resolveWebView(int id) {
+        return webViews.get(Integer.valueOf(id < 0 ? currentWebViewId : id));
+    }
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.addView(webView, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(extraKeysBar, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        setContentView(root);
-        applyWindowInsets(root);
+    // Bring one WebView to the front and make it the one the extra-keys bar,
+    // the volume menu and the back key act on. Nothing is closed or
+    // destroyed: the one leaving the front keeps running exactly as it was,
+    // it just stops being visible. Returns the id now in front, or -1 for an
+    // unknown id. Main thread only.
+    private int showWebView(int id) {
+        int target = id < 0 ? nextWebViewId() : id;
+        WebView view = webViews.get(Integer.valueOf(target));
+        if (view == null) return -1;
+        if (view != webView) {
+            if (webView != null) webView.setVisibility(View.INVISIBLE);
+            view.setVisibility(View.VISIBLE);
+            view.bringToFront();
+            webView = view;
+            currentWebViewId = target;
+            // An armed CTRL/ALT/SHIFT or a key/scroll repeat in flight
+            // belongs to the WebView that is going away, not the one
+            // arriving, so neither carries across the switch.
+            stopKeyRepeat();
+            clearKeyModifiers();
+            // requestFocus only, deliberately without showSoftInput: a switch
+            // is not the user asking to type, and the soft keyboard comes
+            // back on the next extra-keys tap anyway.
+            view.requestFocus();
+        }
+        return target;
+    }
 
-        startBunProcess();
+    // Ordered by id and wrapping around, so with the console and the app
+    // WebView -- the only two that exist -- showWebView(-1) is simply a
+    // toggle between them.
+    private int nextWebViewId() {
+        List<Integer> ids = new ArrayList<>(webViews.keySet());
+        Collections.sort(ids);
+        if (ids.isEmpty()) return currentWebViewId;
+        int index = ids.indexOf(Integer.valueOf(currentWebViewId));
+        return ids.get((index + 1) % ids.size()).intValue();
+    }
+
+    private String webViewLabel(int id) {
+        if (id == CONSOLE_WEBVIEW_ID) return "console";
+        if (id == APP_WEBVIEW_ID) return "app";
+        return "webview";
     }
 
     // Apps targeting API 35+ are laid out edge-to-edge, and from API 36 on the
@@ -383,11 +502,17 @@ public class MainActivity extends Activity {
     }
 
     private void showDebugMenu() {
+        // The switch entry names where it is about to go rather than opening a
+        // picker: with the console and the app WebView as the only two, a
+        // picker would be a second tap to choose the one item that isn't the
+        // one already in front.
+        int next = nextWebViewId();
         new AlertDialog.Builder(this)
             .setItems(new String[]{
                     "Toggle ctrl/alt/shift bar", "Eval in WebView", "Select Terminal Text",
                     "Back", "Forward", "Go to URL...", "Zoom...", "Eruda console",
                     "Background permissions...",
+                    "Switch WebView \u2192 " + next + ": " + webViewLabel(next),
                 },
                 new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface dialog, int which) {
@@ -409,6 +534,7 @@ public class MainActivity extends Activity {
                                 if (webView != null) webView.evaluateJavascript(ERUDA_TOGGLE_JS, null);
                                 break;
                             case 8: showBackgroundPermissionsDialog(); break;
+                            case 9: showWebView(-1); break;
                         }
                     }
                 })
@@ -456,7 +582,7 @@ public class MainActivity extends Activity {
         final int typedMin = 5, typedMax = 2000;
         // Start from whatever zoom is already in effect rather than assuming
         // 100%, so reopening the dialog doesn't misreport the current state.
-        final int current = lastZoomPercent;
+        final int current = zoomPercentOf(webView);
         final SeekBar seekBar = new SeekBar(this);
         seekBar.setMax((max - min) / step);
         final EditText number = new EditText(this);
@@ -669,6 +795,11 @@ public class MainActivity extends Activity {
                             writeErrorToTmp("native link refresh failed; continuing with existing links", linkError);
                         }
                     }
+                    // After the payload settles, so this reads whatever
+                    // package.json the app is actually going to run with --
+                    // including one a payload update just replaced.
+                    readBackToConsole(home);
+
                     String nativeLibDir = getApplicationInfo().nativeLibraryDir;
                     File bunFile = new File(nativeLibDir, "libbun.so");
                     if (bunFile.exists()) {
@@ -730,8 +861,12 @@ public class MainActivity extends Activity {
                             final String targetUrl = extractUrl(line);
                             runOnUiThread(new Runnable() {
                                 @Override public void run() {
-                                    if (webView != null) {
-                                        webView.loadUrl(targetUrl);
+                                    // Explicitly the console WebView, not
+                                    // whichever one happens to be in front:
+                                    // this is jsgotty's own terminal URL.
+                                    WebView console = webViews.get(Integer.valueOf(CONSOLE_WEBVIEW_ID));
+                                    if (console != null) {
+                                        console.loadUrl(targetUrl);
                                     }
                                 }
                             });
@@ -893,7 +1028,15 @@ public class MainActivity extends Activity {
                 + "\"tts\":[\"handle\"],"
                 + "\"dltext\":[\"name\",\"text\"],"
                 + "\"dlbin\":[\"name\",\"base64\"],"
-                + "\"xdgOpen\":[\"target\"]"
+                + "\"xdgOpen\":[\"target\"],"
+                + "\"openWebView\":[\"id\",\"url\"],"
+                + "\"openwv\":[\"id\",\"url\"],"
+                + "\"evalWebView\":[\"id\",\"js\"],"
+                + "\"evalwv\":[\"id\",\"js\"],"
+                + "\"showWebView\":[\"id\"],"
+                + "\"showwv\":[\"id\"],"
+                + "\"currWebView\":[],"
+                + "\"currwv\":[]"
                 + "}";
         }
 
@@ -1014,7 +1157,105 @@ public class MainActivity extends Activity {
             }
         }
 
+        // ---- WebViews (see the registry near webView's declaration) ----
+        // An id of -1 is "whichever WebView is in front" here and in
+        // evalWebView; ids are fixed at startup (0 console, 1 app), so an
+        // unknown one is an error rather than a request to create anything.
+        // openWebView deliberately does not bring its target to the front:
+        // loading into the app WebView while the console stays on screen is
+        // the normal case, and showWebView is the only thing that ever
+        // changes what the user is looking at.
+        //
+        // Each of the four also answers to a short openwv/evalwv/showwv/
+        // currwv spelling, the same way clipboardRead/clipboardWrite answer
+        // to getcb/setcb -- both spellings are listed in _discover above, so
+        // either works from the CLI and from rpcraw, not only through
+        // native-bridge.js's own wrappers.
+        if (func.equals("openWebView") || func.equals("openwv")) {
+            final int id = finalArgv.optInt(0, -1);
+            final String url = finalArgv.optString(1, "");
+            Object result = runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    WebView target = resolveWebView(id);
+                    if (target == null) return null;
+                    if (!url.isEmpty()) target.loadUrl(url);
+                    return Integer.valueOf(id < 0 ? currentWebViewId : id);
+                }
+            });
+            if (result == null) return JSONObject.quote("error: no such WebView: " + id);
+            return String.valueOf(result);
+        }
+
+        if (func.equals("evalWebView") || func.equals("evalwv")) {
+            return evalWebViewSync(finalArgv.optInt(0, -1), finalArgv.optString(1, ""));
+        }
+
+        if (func.equals("showWebView") || func.equals("showwv")) {
+            final int id = finalArgv.optInt(0, -1);
+            Object result = runOnMainThreadSync(new Callable<Object>() {
+                @Override public Object call() {
+                    return Integer.valueOf(showWebView(id));
+                }
+            });
+            int shown = ((Integer) result).intValue();
+            if (shown < 0) return JSONObject.quote("error: no such WebView: " + id);
+            return String.valueOf(shown);
+        }
+
+        if (func.equals("currWebView") || func.equals("currwv")) {
+            return String.valueOf(currentWebViewId);
+        }
+
         return JSONObject.quote("Unknown func 未知函式: " + func + "\r\n" + finalArgv.toString());
+    }
+
+    // Every other bridge function finishes inside runOnMainThreadSync's own
+    // Callable, so its return value is the answer. evaluateJavascript is not
+    // like that: it starts an evaluation and delivers the result to a
+    // callback on the main thread some time later, so what the Callable
+    // returns is only "the evaluation was started". Hence a second latch,
+    // waited on by this connection's own thread.
+    //
+    // Its timeout is deliberately shorter than native-bridge.js's own 5s call
+    // timeout, so a page that never answers (JS busy-looping, a WebView that
+    // never got a document) comes back as a real error naming the function,
+    // rather than as the caller's generic timeout.
+    private static final long EVAL_WEBVIEW_TIMEOUT_MS = 4000;
+
+    private String evalWebViewSync(final int id, final String js) throws Exception {
+        final String[] resultHolder = new String[1];
+        final boolean[] found = { false };
+        final CountDownLatch latch = new CountDownLatch(1);
+        runOnMainThreadSync(new Callable<Object>() {
+            @Override public Object call() {
+                WebView target = resolveWebView(id);
+                if (target == null) {
+                    latch.countDown();
+                    return null;
+                }
+                found[0] = true;
+                target.evaluateJavascript(js, new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String value) {
+                        resultHolder[0] = value;
+                        latch.countDown();
+                    }
+                });
+                return null;
+            }
+        });
+
+        if (!found[0]) return JSONObject.quote("error: no such WebView: " + id);
+        if (!latch.await(EVAL_WEBVIEW_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            return JSONObject.quote(
+                "error: evalWebView timed out after " + EVAL_WEBVIEW_TIMEOUT_MS + "ms");
+        }
+
+        // evaluateJavascript already hands back JSON text -- "null" when the
+        // value has no JSON representation (undefined, a function, a thrown
+        // exception) -- and JSON text is exactly what this protocol's
+        // response body is, so it goes back verbatim. The caller therefore
+        // gets the real value, not a string containing it.
+        return resultHolder[0] != null ? resultHolder[0] : "null";
     }
 
     // A bare scheme:// prefix (http, https, mailto, market, ...) is handed
@@ -1485,6 +1726,44 @@ public class MainActivity extends Activity {
         return result.toString();
     }
 
+    // Deliberately incapable of failing: a missing or unreadable file,
+    // malformed JSON, no "buninu" object, no "backToConsole" key, or a value
+    // that is not a boolean all leave the default (true -- back returns to
+    // the console) exactly as it was. This runs on the Bun-startup thread and
+    // its result is read from the main thread on a back press, so an
+    // exception escaping here would either kill that thread partway through
+    // startup or, worse, surface as a crash on a key press; there is no
+    // failure mode worth either. The size cap keeps a package.json that is
+    // somehow enormous (or a path that is not really a package.json at all)
+    // from being pulled into memory in one piece.
+    private static final int PACKAGE_JSON_MAX_BYTES = 1 << 20;
+
+    private void readBackToConsole(File home) {
+        try {
+            File config = new File(home, "package.json");
+            if (!config.isFile() || config.length() > PACKAGE_JSON_MAX_BYTES) return;
+
+            byte[] buffer = new byte[(int) config.length()];
+            FileInputStream input = new FileInputStream(config);
+            int read = 0;
+            try {
+                while (read < buffer.length) {
+                    int n = input.read(buffer, read, buffer.length - read);
+                    if (n < 0) break;
+                    read += n;
+                }
+            } finally { input.close(); }
+
+            JSONObject buninu = new JSONObject(new String(buffer, 0, read, "UTF-8"))
+                .optJSONObject("buninu");
+            if (buninu == null || buninu.isNull("backToConsole")) return;
+            backToConsole = buninu.optBoolean("backToConsole", true);
+        } catch (Throwable ignored) {
+            // Keep the default. Not even logged: a config file that does not
+            // say anything about this is the normal case, not an error.
+        }
+    }
+
     private String readText(File file) {
         if (!file.isFile()) return "";
         try {
@@ -1533,7 +1812,8 @@ public class MainActivity extends Activity {
     private void showArchiveStructureError() {
         runOnUiThread(new Runnable() {
             @Override public void run() {
-                if (webView == null) return;
+                WebView console = webViews.get(Integer.valueOf(CONSOLE_WEBVIEW_ID));
+                if (console == null) return;
                 String html = "<!doctype html><meta charset=\"utf-8\">" +
                     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
                     "<body style=\"margin:0;padding:32px;background:#111;color:#eee;" +
@@ -1544,7 +1824,7 @@ public class MainActivity extends Activity {
                     "<p>解壓時會移除第一層，再將內容放入 Buninu home。<br>" +
                     "The first component is stripped before extraction into the Buninu home.</p>" +
                     "</body>";
-                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+                console.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
             }
         });
     }
@@ -1572,6 +1852,17 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
+        } else if (backToConsole
+                   && currentWebViewId != CONSOLE_WEBVIEW_ID
+                   && webViews.containsKey(Integer.valueOf(CONSOLE_WEBVIEW_ID))) {
+            // Back out of the app WebView is a switch, not a close: it stays
+            // loaded and running behind the console, exactly as the volume
+            // menu's Switch WebView would leave it. Only the console with
+            // nothing left to go back to falls through to the system's own
+            // back behavior -- as does the app WebView too when
+            // buninu.backToConsole is false, which is how an app that wants
+            // back to mean "leave" gets it.
+            showWebView(CONSOLE_WEBVIEW_ID);
         } else {
             super.onBackPressed();
         }
@@ -1584,7 +1875,10 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (webView != null) webView.onResume();
+        // Every WebView, not just the front one: a background WebView is
+        // still running (that is what makes openWebView a background load),
+        // so it is resumed on the same terms as the one on screen.
+        for (WebView view : webViews.values()) view.onResume();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {

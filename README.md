@@ -160,6 +160,16 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
 
 `--no-shell` 不用帶值，出現就把 `buninu.exitAfterCmd` 設成 `true`（預設 `false`，見 [Buninu README](https://www.npmjs.com/package/buninu) 的 `exitAfterCmd` 說明）：`buninu.command` 執行完後直接結束，不會像預設那樣掉回互動式 shell。合併規則跟 `-c` 一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
 
+### 用 `--no-back-to-console` 讓返回鍵直接離開 App
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
+```
+
+`--no-back-to-console` 不用帶值，出現就把 `buninu.backToConsole` 設成 `false`（預設 `true`）：在 app WebView 而且它自己沒有上一頁可回時，按返回鍵會照 Android 預設行為離開 App，而不是切回 console WebView。合併規則跟 `-c`／`--no-shell` 完全一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
+
+這個欄位是**由 Android 端的 App 讀的**，不是 Buninu 自己讀的，所以在 APK 以外的地方設它不會有任何效果。App 端讀不到檔案、JSON 壞掉、沒有這個欄位、值不是布林，一律當成 `true`（回到 console），不會因此丟出任何錯誤。
+
 ### 用 `-b`/`--bun-bin` 指定要封裝進 APK 的 Bun
 
 ```sh
@@ -188,7 +198,7 @@ Packaged Bun (libbun.so) revision:
   1.4.0-canary.1+41c3f6fdb
 ```
 
-`-c`/`--no-shell`/`--config`/`-b` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+`-c`/`--no-shell`/`--no-back-to-console`/`--config`/`-b` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
@@ -315,7 +325,9 @@ tools/debug.keystore
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
-實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡 eval JS、選取終端機文字、上一頁／下一頁、跳到指定網址、縮放、Eruda console、背景權限設定。
+實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡 eval JS、選取終端機文字、上一頁／下一頁、跳到指定網址、縮放、Eruda console、背景權限設定、切換 WebView（直接切到下一個，不再多一層選單；項目本身會標出要切去哪一個，例如 `Switch WebView → 1: app`）。
+
+App 裡有兩個 WebView，從啟動就都存在、不會被建立或關閉：`0` 是 console（Buninu 起的 jsgotty 終端機），`1` 是 app WebView，一開始是空白的、擺在後面。按鍵列、音量鍵選單、返回鍵一律作用在**當前在前景的那一個** WebView 上，所以切換 WebView 就等於同時把這三者換過去。在 app WebView 沒有上一頁可回時按返回鍵，會切回 console 而不是結束 App——沒有任何東西被關掉，離開前景的那個 WebView 照樣繼續跑（這個行為由 `buninu.backToConsole` 決定，預設 `true`，見 `--no-back-to-console`）。切換的方式是音量鍵選單最後那個「Switch WebView →」項目（按下去就直接切，不會再問你要哪一個），或從 Buninu 裡呼叫下面的 `showWebView`。
 
 ## 原生剪貼簿支援
 
@@ -329,6 +341,28 @@ xclip -o -selection clipboard             # 讀出來
 `-selection primary`（不帶 `-selection` 時的預設值）維持純本地檔案、不碰原生剪貼簿，對應真正 X11 的語意；只有 `-selection clipboard`/`-clip` 才會透過 native-bridge 走到 Android 系統剪貼簿。jsmdcui 的剪貼簿後端偵測本來就會在偵測到 `xclip` 時使用它，所以 jsmdcui 裡的滑鼠中鍵貼上、選取文字自動同步、`PastePrimary` 指令，在這個 App 裡不需要額外設定就能動作。
 
 要直接呼叫這座橋、不透過 `xclip`，可以在 `js back` 區塊裡 `import { toast, clipboardRead, clipboardWrite } from` 該路徑；每次呼叫預設 5 秒逾時，Android 端沒有回應也不會卡住呼叫端。詳見 `no_backup/README.md` 的「Commands inside the shell」一節。
+
+`xdg-open` 在 APK 裡預設是把 URL 丟給系統的預設處理程式（等於離開 App），設 `MINAPK_WEBVIEW=<id>` 就改成載進那個 WebView 並直接切到前景：
+
+```sh
+MINAPK_WEBVIEW=1 xdg-open https://example.com   # 開在 app WebView 並顯示
+export MINAPK_WEBVIEW=1                         # 或整個 session 都這樣
+```
+
+`0` 是 console，會把終端機那頁導走（返回鍵可以回去、jsgotty 會重連，但通常不是你要的）；`-1` 是當前前景那個。只有 URL 會被導向，檔案路徑一律照舊走系統處理程式——WebView 從 API 30 起 `setAllowFileAccess` 預設 false，`file://` 讀不到 Buninu home 底下的檔案，而原生端本來就有 content:// provider 在服務同一個檔案。值不是純整數會在 stderr 提醒並當成沒設（不會亂猜），沒設或空字串維持原行為，指到不存在的 WebView 則印出錯誤後退回系統處理程式。
+
+同一座橋也把上面那兩個 WebView 交給 Buninu 控制，共四個 function：`openWebView(id, url)`、`evalWebView(id, js)`、`showWebView(id)`、`currWebView()`。id 給 `-1` 代表「目前在前景的那一個」。
+
+四個都各有一個短名 `openwv`／`evalwv`／`showwv`／`currwv`，跟剪貼簿的 `getcb`／`setcb` 同一套做法：Java 端兩種拼法都收，`_discover` 也兩種都列，所以 CLI、`rpcraw`、`import` 三種用法都通。
+
+```sh
+native-bridge openwv 1 https://example.com   # 載入，但畫面不動
+native-bridge showwv 1                       # 這時候才切到前景
+native-bridge evalwv 1 document.title
+native-bridge currwv
+```
+
+`openWebView` **只載入、不切到前景**，所以「使用者還在看終端機，背景先把 app WebView 的頁面載好」是一次呼叫就做完的事；`showWebView` 才是唯一會改變畫面的那個，`showWebView -1` 不是空操作而是切到下一個（只有兩個 WebView 時就是來回切換）。`evalWebView` 回傳的是運算式真正的值（數字/字串/物件），不是包成字串的值；`undefined`、function、丟出例外都會變成 `null`，因為 WebView 本身就分不出這三者。同樣的四個 function 也能 `import` 進 `js back` 區塊用（另外還有 `WEBVIEW_CURRENT`／`WEBVIEW_CONSOLE`／`WEBVIEW_APP` 三個常數）。
 
 同一座橋也接了語音朗讀：`tts "hello"` 會唸出文字並等講完才結束，`-a` 不等直接返回。沒有 App 可用時會退回 `espeak-ng`/`say`/PowerShell 等桌面平台指令，一樣可以用。
 
