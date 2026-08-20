@@ -17,7 +17,7 @@
 pkg update
 pkg install aapt aapt2 zip unzip openjdk-21 nodejs npm
 npm install -g bun
-bun upgrade --canary
+bun upgrade
 ```
 
 ### Debian / Ubuntu（apt）arm64 inside Termux proot
@@ -27,7 +27,7 @@ apt update
 apt install aapt zipalign zip unzip openjdk-21-jdk-headless nodejs npm
 npm i -g @oven/bun-linux-aarch64-android --force
 export PATH=$(npm root -g)/@oven/bun-linux-aarch64-android/bin:$PATH
-bun upgrade --canary
+bun upgrade
 
 # when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
@@ -128,6 +128,18 @@ root, the build runs `which bun` and copies the discovered Bun to
 `./libbun.so`. The build stops if Bun cannot be found or copied. That Bun must
 be executable on the target Android arm64 environment. To name the Bun to use
 explicitly instead of letting `PATH` decide, see `-b`/`--bun-bin` in section 4.
+
+> [!IMPORTANT]
+> That `which bun` runs only while `libbun.so` is **missing**. Once it has
+> been copied, every later build uses that copy and never consults `PATH`
+> again -- so a later `bun upgrade`, a newly installed release, or a
+> switch to a different Bun does not reach the APK, which keeps shipping the
+> old one. The revision printed by step `5b` is how you check. To move to
+> whatever `PATH` has now, say so explicitly once:
+>
+> ```sh
+> npx @drxiaozhi/minapk -b "$(which bun)"
+> ```
 
 - The native-library packaging step (`5b`) runs `libbun.so --revision` and
 prints the result, so you can tell which Bun this particular APK ships.
@@ -536,10 +548,11 @@ back to desktop commands (`espeak-ng`/`say`/PowerShell) instead.
 ## Producing a single-file executable
 
 Both routes below produce the kind of elf minapk wants -- an arm64 executable
-whose loader is `/system/bin/linker64`. Both need a canary build of Bun:
+whose loader is `/system/bin/linker64`. Both need Bun 1.4 or newer; the latest
+1.4 release is enough, no canary build required:
 
 ```sh
-bun upgrade --canary
+bun upgrade
 ```
 
 ### Route 1: a one-line `bun build`

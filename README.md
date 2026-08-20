@@ -17,7 +17,7 @@
 pkg update
 pkg install aapt aapt2 zip unzip openjdk-21 nodejs npm
 npm install -g bun
-bun upgrade --canary
+bun upgrade
 ```
 
 ### Debian / Ubuntu（apt）arm64 inside Termux proot
@@ -27,7 +27,7 @@ apt update
 apt install aapt zipalign zip unzip openjdk-21-jdk-headless nodejs npm
 npm i -g @oven/bun-linux-aarch64-android --force
 export PATH=$(npm root -g)/@oven/bun-linux-aarch64-android/bin:$PATH
-bun upgrade --canary
+bun upgrade
 
 # when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
@@ -97,6 +97,17 @@ bun ./index.js
 或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
 執行的版本。要明確指定用哪一份 Bun、而不是交給 `PATH` 決定，見第 4 節的
 `-b`/`--bun-bin`。
+
+> [!IMPORTANT]
+> 這個 `which bun` 只在 `libbun.so` **不存在時**跑一次。複製過去之後，
+> 之後每次建置都直接用根目錄那一份，不會再看 `PATH`——所以你後來
+> `bun upgrade`、裝了新版、或切換到別的 Bun，建出來的 APK
+> 裡還是舊的那顆。`5b` 印出的 revision 就是拿來確認這件事的。
+> 要換成 `PATH` 上現在這顆，明確指定一次：
+>
+> ```sh
+> npx @drxiaozhi/minapk -b "$(which bun)"
+> ```
 
 - 封裝原生函式庫那一步（`5b`）會執行 `libbun.so --revision` 並印出結果，
 讓你知道這顆 APK 裡到底裝的是哪個版本的 Bun。因為 `libbun.so` 是
@@ -368,10 +379,10 @@ native-bridge currwv
 
 ## 產生單一可執行檔
 
-以下兩條路徑都會產生 minapk 要的那種 elf——以 `/system/bin/linker64` 為載入器的 arm64 執行檔。兩者都需要 canary 版的 Bun：
+以下兩條路徑都會產生 minapk 要的那種 elf——以 `/system/bin/linker64` 為載入器的 arm64 執行檔。兩者都需要 Bun 1.4 以上，用最新的 1.4 正式版就可以，不需要 canary：
 
 ```sh
-bun upgrade --canary
+bun upgrade
 ```
 
 ### 途徑一：一行 `bun build`
