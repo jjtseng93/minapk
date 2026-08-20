@@ -779,7 +779,25 @@ public class MainActivity extends Activity {
         return super.dispatchTouchEvent(event);
     }
 
+    // Process-wide rather than per-Activity, because the app process outlives
+    // an Activity that has finished: Android keeps it around as a cached
+    // process, threads and child processes included. A relaunch then builds a
+    // *new* MainActivity inside that same process, and these two are what it
+    // collides with -- the bridge's name lives in Linux's abstract namespace,
+    // which releases it only when the socket is closed or the process dies,
+    // so binding it a second time fails with EADDRINUSE and the app comes back
+    // up with no PKG_BRIDGE_SOCK at all. Keeping the references here is what
+    // lets onDestroy (and the next start) clean up after the previous one.
+    private static LocalServerSocket bridgeServer;
+    private static java.lang.Process bunProcess;
+
     private void startBunProcess() {
+        // Belt and braces for the case where onDestroy never ran (the system
+        // killed the Activity without it, say): whatever is left over from a
+        // previous Activity in this process goes away before a new one is
+        // started, rather than ending up with two Buninu processes.
+        stopBunProcess();
+
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
@@ -816,7 +834,16 @@ public class MainActivity extends Activity {
                         throw new FileNotFoundException("Buninu init not found: " + initFile);
                     }
 
-                    ProcessBuilder pb = new ProcessBuilder(execPath, initFile.getAbsolutePath());
+                    // --no-orphans makes Bun (a) exit when this app process
+                    // dies and (b) kill every descendant of its own on the way
+                    // out. Both halves matter here: Process.destroy() below
+                    // only ever reaches Bun itself, so without it jsgotty and
+                    // the shell Bun spawned would be reparented and keep
+                    // running after the user leaves, and an app process killed
+                    // by the system would leave the whole tree behind with
+                    // nothing left to ever clean it up.
+                    ProcessBuilder pb = new ProcessBuilder(
+                        execPath, "--no-orphans", initFile.getAbsolutePath());
                     pb.directory(home);
 
                     Map<String, String> env = pb.environment();
@@ -854,6 +881,7 @@ public class MainActivity extends Activity {
 
                     pb.redirectErrorStream(true);
                     java.lang.Process process = pb.start();
+                    bunProcess = process;
 
                     BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                     String line;
@@ -908,6 +936,14 @@ public class MainActivity extends Activity {
     // this returns "%00" followed by the same name, not the name itself.
     private String startNativeBridge() {
         final String name = getPackageName() + ".native-bridge";
+
+        // A previous Activity in this same process may still hold the name
+        // (see bridgeServer). Closing it first is what makes the bind below
+        // succeed on a relaunch; without this it fails with EADDRINUSE and the
+        // whole app comes back up without a bridge, which looks exactly like
+        // "native-bridge stopped working after I left and reopened".
+        closeBridgeServer();
+
         final LocalServerSocket server;
         try {
             server = new LocalServerSocket(name);
@@ -916,6 +952,7 @@ public class MainActivity extends Activity {
             writeErrorToTmp("native bridge failed to start; continuing without it", e);
             return null;
         }
+        bridgeServer = server;
 
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1905,16 +1942,91 @@ public class MainActivity extends Activity {
                     @Override public void onBackInvoked() {
                         // Registering a callback means nothing else handles
                         // the press any more, so the unhandled case has to
-                        // finish the Activity itself -- there is no
+                        // deal with leaving itself -- there is no
                         // super.onBackPressed() to fall through to here.
-                        if (!activity.handleBack()) activity.finish();
+                        if (!activity.handleBack()) activity.confirmExit();
                     }
                 });
         }
     }
 
     @Override public void onBackPressed() {
-        if (!handleBack()) super.onBackPressed();
+        if (!handleBack()) confirmExit();
+    }
+
+    // Leaving is confirmed rather than immediate, because leaving is not free
+    // any more: onDestroy tears down the Buninu process and everything running
+    // inside it (see there for why it has to). A back gesture at the wrong
+    // moment should not silently end a long-running shell.
+    //
+    // The flag guards against stacking dialogs -- back is easy to press twice,
+    // and the second press would otherwise put a second copy on top of the
+    // first.
+    private boolean exitDialogShowing;
+
+    private void confirmExit() {
+        if (exitDialogShowing) return;
+        exitDialogShowing = true;
+        new AlertDialog.Builder(this)
+            .setTitle("Exit 離開")
+            .setMessage("Leaving stops Buninu and everything running in it.\n"
+                + "離開會結束 Buninu 與裡面正在執行的一切。")
+            .setPositiveButton("Exit 離開", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    finish();
+                }
+            })
+            .setNegativeButton("Cancel 取消", null)
+            .setOnDismissListener(new DialogInterface.OnDismissListener() {
+                @Override public void onDismiss(DialogInterface dialog) {
+                    exitDialogShowing = false;
+                }
+            })
+            .show();
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        // Unconditional, not only when isFinishing(): anything still bound or
+        // running when this Activity goes away is what the *next* Activity in
+        // this process trips over, and that is true however the Activity came
+        // to be destroyed. A recreate then costs a fresh Buninu process, which
+        // is a visible, self-healing outcome -- unlike a stale bridge, which
+        // is silent.
+        closeBridgeServer();
+        stopBunProcess();
+
+        if (isFinishing()) {
+            // The user chose to leave. Threads blocked in accept() and
+            // readLine(), plus the WebViews, would otherwise keep this process
+            // alive as a cached process -- which is exactly the state that
+            // made a relaunch come back without a working bridge. Ending the
+            // process is what makes "leaving" actually mean it.
+            System.exit(0);
+        }
+    }
+
+    private static void closeBridgeServer() {
+        LocalServerSocket server = bridgeServer;
+        bridgeServer = null;
+        if (server == null) return;
+        try {
+            // Closing also unblocks the accept loop, which logs "accept loop
+            // stopped" and ends its thread.
+            server.close();
+        } catch (IOException e) {
+            Log.w("NativeBridge", "closing native bridge failed", e);
+        }
+    }
+
+    private static void stopBunProcess() {
+        java.lang.Process process = bunProcess;
+        bunProcess = null;
+        if (process == null) return;
+        // destroy() only reaches Bun itself. Everything Bun spawned (jsgotty,
+        // the shell) goes with it because Bun was started with --no-orphans;
+        // see startBunProcess.
+        process.destroy();
     }
 
     @Override protected void onPause() {
