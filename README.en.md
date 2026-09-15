@@ -45,8 +45,9 @@ cd ~/minapk-hello
 printf 'console.log("# Hello World!")\n' > hlw.js
 ```
 
-Compile it into an Android Bun single-file executable. The argument order is
-deliberately fixed to make the command easy to remember:
+Compile it into an Android Bun single-file executable. Remember the argument
+order with **Fast Code Makes Buns**: `format`, `compile`, `minify`, `bytecode`
+(`fcmb`).
 
 ```sh
 bun build --format=esm --compile --minify --bytecode ./hlw.js
