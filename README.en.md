@@ -15,7 +15,7 @@
 > installed and you only want to learn how to use it, jump directly to the
 > [user manual inside the APK](#user-manual-inside-the-apk).
 
-## 0. Install dependencies
+## Install dependencies
 
 ### Termux
 
@@ -90,7 +90,7 @@ Finally, in Android's Files app or another file manager:
 4. Tap "Open" when installation finishes. The terminal runs `hlw` and shows
    `# Hello World!`.
 
-## 1. App and APK name
+## App name and output filename
 
 ```sh
 npx @drxiaozhi/minapk -n MyApp
@@ -106,7 +106,7 @@ Without `-n`, the current value of the project root's `appname.txt` (`Hello2`)
 is used as the default; minapk never writes to or modifies that file, so a run
 without `-n` always builds the same, predictable name.
 
-## 2. Android package name
+## Android package name
 
 ```sh
 npx @drxiaozhi/minapk -p com.drjohn.bunwv
@@ -128,7 +128,7 @@ Without `-p`, the current value of the project root's `pkgname.txt`
 (`com.drjohn.bunwv`) is used as the default, likewise never written to or
 modified by minapk.
 
-## 3. Build
+## Build steps
 
 ```sh
 npx @drxiaozhi/minapk [/path/to/your.elf]
@@ -213,7 +213,7 @@ npm run clean
 bun ./clean.js
 ```
 
-## 4. Advanced configuration
+## Advanced configuration
 
 ### Replace the Buninu `package.json` packaged into the APK with `--config`
 
@@ -485,12 +485,16 @@ tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
 
+### Volume Up menu
+
 The physical **Volume Up** button is intercepted (it never actually changes
 the volume) and opens a small menu instead: toggle the extra-keys bar, eval JS
 in the WebView, select terminal text, back/forward, go to a URL, zoom, Eruda
 console, background permissions, and switch WebView -- the last one switches
 straight away instead of opening a picker, and names where it is going (for
 example `Switch WebView -> 1: app`).
+
+### WebViews
 
 The app has two WebViews, both alive from startup and neither ever created nor
 closed: `0` is the console (the jsgotty terminal Buninu starts) and `1` is the
@@ -503,6 +507,8 @@ the app (that is `buninu.backToConsole`, default `true`; see
 the front keeps running exactly as it was. Switch from the volume menu's last
 entry, which switches on the tap itself rather than asking which one, or from
 Buninu with `showWebView` below.
+
+### Back button
 
 The step where back really would leave the app (the console, with nothing left
 to go back to) asks for confirmation first. Confirming does more than close the
