@@ -11,6 +11,9 @@
 
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
+> 以下內容從建置 APK 開始。如果你已經裝好 APK，只想知道裡面怎麼操作，
+> 請直接前往 [User manual: inside the APK](#user-manual-inside-the-apk)。
+
 ## 0. 安裝依賴
 
 ### Termux
@@ -351,37 +354,13 @@ bun no_backup/bin/init.js --export buninu.tgz
 
 若不存在，腳本會詢問是否執行 `npx buninu@latest --export`。只有明確輸入 `y` 或 `Y` 才會從 npm 匯出。
 
-## 主要外部工具
+## User manual: inside the APK
 
-- Bun
-- aapt2
-- zipalign
-- zip
-- Java
-- keytool（只有建立 keystore 時需要）
+這一區說明 APK 安裝並開啟後，使用者可以直接操作的功能。Buninu shell
+內建指令的完整說明請見 Buninu 的
+[Commands inside the shell](https://github.com/jjtseng93/buninu#commands-inside-the-shell)。
 
-其他建置用 JAR 位於 `tools/`。
-
-## APK 簽章與 keytool
-
-`build.sh` 與 `repack.sh` 預設使用：
-
-```text
-tools/debug.keystore
-```
-
-如果這個檔案不存在，腳本才會呼叫 `keytool` 自動建立 debug keystore。之後的 build 與 repack 會持續使用同一個檔案簽章，因此更新已安裝的 APK 時請保留它。
-
-專案本身隨附一份現成的 `tools/debug.keystore`，刻意讓沒有 `keytool`（或整個 Java 環境）的環境也能完整跑完簽章這一步——末日生存情境下，能建置出可安裝的 APK 比什麼都重要。
-
-> [!WARNING]
-> 隨附的 `tools/debug.keystore` 是**所有沒有換掉它的使用者共用同一把私鑰**（密碼固定是 `android`），因為它透過 npm 公開發佈，任何人都拿得到。這代表：
-> - 用預設 keystore 簽出來的 APK，跟其他人用同一份預設 keystore 簽出來的 APK，是同一把金鑰簽的。
-> - 只要 package name 相同，任何人都能用這把公開金鑰重新簽署別的 APK，Android 會把它當成合法更新接受安裝。
->
-> 只要環境裡有 `keytool`，刪掉 `tools/debug.keystore` 再重新建置一次，腳本就會自動幫你產生一把只有你自己有的新金鑰。正式發佈或給別人安裝之前，請務必這樣做一次，或改用你自己的 release keystore 並妥善備份私鑰與密碼。
-
-## 螢幕按鍵列
+### 螢幕按鍵列
 
 建出來的 App 底部有一排終端機常用按鍵，很多鍵短按跟長按是不同功能：
 
@@ -407,7 +386,7 @@ App 裡有兩個 WebView，從啟動就都存在、不會被建立或關閉：`0
 
 返回鍵真的會離開 App 的那一步（console 也沒有上一頁可回時）會先跳出確認對話框。確認離開之後不只是關掉畫面：Buninu 行程、native bridge 的 socket 都會收掉，整個 App 行程結束，下次開啟是全新的一份。Buninu 是用 `bun --no-orphans` 啟動的，所以它自己 spawn 出去的 jsgotty、shell 也會跟著一起結束，不會留下孤兒行程；同一個旗標也讓 Buninu 在 App 行程被系統殺掉時自行退出。
 
-## 原生剪貼簿支援
+### Native bridge
 
 App 內建一座從 Buninu 通到 Android 原生層的橋（`no_backup/apps/native-bridge`），透過 `MainActivity` 開的一個 unix socket，把 Toast 與系統剪貼簿讀寫暴露給 Buninu 裡跑的 Bun 行程。Buninu 隨附的 `xclip` 指令（`apps/xclip`）就是建在這座橋上：
 
@@ -443,6 +422,36 @@ native-bridge currwv
 `openWebView` **只載入、不切到前景**，所以「使用者還在看終端機，背景先把 app WebView 的頁面載好」是一次呼叫就做完的事；`showWebView` 才是唯一會改變畫面的那個，`showWebView -1` 不是空操作而是切到下一個（只有兩個 WebView 時就是來回切換）。`evalWebView` 回傳的是運算式真正的值（數字/字串/物件），不是包成字串的值；`undefined`、function、丟出例外都會變成 `null`，因為 WebView 本身就分不出這三者。同樣的四個 function 也能 `import` 進 `js back` 區塊用（另外還有 `WEBVIEW_CURRENT`／`WEBVIEW_CONSOLE`／`WEBVIEW_APP` 三個常數）。
 
 同一座橋也接了語音朗讀：`tts "hello"` 會唸出文字並等講完才結束，`-a` 不等直接返回。沒有 App 可用時會退回 `espeak-ng`/`say`/PowerShell 等桌面平台指令，一樣可以用。
+
+## 主要外部工具
+
+- Bun
+- aapt2
+- zipalign
+- zip
+- Java
+- keytool（只有建立 keystore 時需要）
+
+其他建置用 JAR 位於 `tools/`。
+
+## APK 簽章與 keytool
+
+`build.sh` 與 `repack.sh` 預設使用：
+
+```text
+tools/debug.keystore
+```
+
+如果這個檔案不存在，腳本才會呼叫 `keytool` 自動建立 debug keystore。之後的 build 與 repack 會持續使用同一個檔案簽章，因此更新已安裝的 APK 時請保留它。
+
+專案本身隨附一份現成的 `tools/debug.keystore`，刻意讓沒有 `keytool`（或整個 Java 環境）的環境也能完整跑完簽章這一步——末日生存情境下，能建置出可安裝的 APK 比什麼都重要。
+
+> [!WARNING]
+> 隨附的 `tools/debug.keystore` 是**所有沒有換掉它的使用者共用同一把私鑰**（密碼固定是 `android`），因為它透過 npm 公開發佈，任何人都拿得到。這代表：
+> - 用預設 keystore 簽出來的 APK，跟其他人用同一份預設 keystore 簽出來的 APK，是同一把金鑰簽的。
+> - 只要 package name 相同，任何人都能用這把公開金鑰重新簽署別的 APK，Android 會把它當成合法更新接受安裝。
+>
+> 只要環境裡有 `keytool`，刪掉 `tools/debug.keystore` 再重新建置一次，腳本就會自動幫你產生一把只有你自己有的新金鑰。正式發佈或給別人安裝之前，請務必這樣做一次，或改用你自己的 release keystore 並妥善備份私鑰與密碼。
 
 ## 產生單一可執行檔
 

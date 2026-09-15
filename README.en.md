@@ -11,6 +11,10 @@
 
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
+> The following sections start with building the APK. If it is already
+> installed and you only want to learn how to use it, jump directly to the
+> [user manual inside the APK](#user-manual-inside-the-apk).
+
 ## 0. Install dependencies
 
 ### Termux
@@ -449,51 +453,13 @@ bun no_backup/bin/init.js --export buninu.tgz
 Otherwise, the script asks whether to run `npx buninu@latest --export`. It
 downloads from npm only after an explicit `y` or `Y` response.
 
-## Main external tools
+## User manual: inside the APK
 
-- Bun
-- aapt2
-- zipalign
-- zip
-- Java
-- keytool (only when creating the keystore)
+This section covers features available after installing and opening the APK.
+For the complete reference to commands provided inside the Buninu shell, see
+[Commands inside the shell](https://github.com/jjtseng93/buninu#commands-inside-the-shell).
 
-Other build-time JARs are stored under `tools/`.
-
-## APK signing and keytool
-
-`build.sh` and `repack.sh` use this file by default:
-
-```text
-tools/debug.keystore
-```
-
-The scripts invoke `keytool` to create it only when it does not exist. Later
-builds and repacks continue signing with the same file, so retain it when
-updating an installed APK.
-
-The project ships a ready-made `tools/debug.keystore` on purpose, so that even
-an environment without `keytool` (or without Java at all) can still complete
-signing and produce an installable APK -- in a doomsday-survival scenario,
-getting an installable APK out the door matters more than anything else.
-
-> [!WARNING]
-> The bundled `tools/debug.keystore` is **the same private key shared by every
-> user who hasn't replaced it** (password is the fixed `android`), because it
-> ships publicly through npm and anyone can get it. That means:
-> - An APK signed with the default keystore is signed with the exact same key
->   as everyone else's default-keystore APK.
-> - Anyone can re-sign a different APK with that same public key, and as long
->   as the package name matches, Android will accept it as a legitimate
->   update.
->
-> If `keytool` is available in your environment, delete `tools/debug.keystore`
-> and build once more -- the scripts will generate a fresh key that's yours
-> alone. Do this before any real release or before handing the APK to anyone
-> else, or switch to your own release keystore and back up its private key and
-> password securely.
-
-## On-screen key bar
+### On-screen key bar
 
 The built app has a row of terminal-friendly keys at the bottom; a short tap
 and a long press often do different things:
@@ -546,7 +512,7 @@ started as `bun --no-orphans`, so jsgotty and the shell it spawned go with it
 rather than being left behind as orphans; the same flag also makes Buninu exit
 on its own if the system kills the app process.
 
-## Native clipboard support
+### Native bridge
 
 The app ships a bridge from Buninu to the Android native layer
 (`no_backup/apps/native-bridge`): `MainActivity` opens a unix socket that
@@ -622,6 +588,50 @@ since WebView itself does not distinguish them. The same four functions can be
 The same bridge also covers Text-To-Speech(tts): `tts "hello"` speaks text and waits for
 it to finish, `-a` returns immediately instead. Without the app it falls
 back to desktop commands (`espeak-ng`/`say`/PowerShell) instead.
+
+## Main external tools
+
+- Bun
+- aapt2
+- zipalign
+- zip
+- Java
+- keytool (only when creating the keystore)
+
+Other build-time JARs are stored under `tools/`.
+
+## APK signing and keytool
+
+`build.sh` and `repack.sh` use this file by default:
+
+```text
+tools/debug.keystore
+```
+
+The scripts invoke `keytool` to create it only when it does not exist. Later
+builds and repacks continue signing with the same file, so retain it when
+updating an installed APK.
+
+The project ships a ready-made `tools/debug.keystore` on purpose, so that even
+an environment without `keytool` (or without Java at all) can still complete
+signing and produce an installable APK -- in a doomsday-survival scenario,
+getting an installable APK out the door matters more than anything else.
+
+> [!WARNING]
+> The bundled `tools/debug.keystore` is **the same private key shared by every
+> user who hasn't replaced it** (password is the fixed `android`), because it
+> ships publicly through npm and anyone can get it. That means:
+> - An APK signed with the default keystore is signed with the exact same key
+>   as everyone else's default-keystore APK.
+> - Anyone can re-sign a different APK with that same public key, and as long
+>   as the package name matches, Android will accept it as a legitimate
+>   update.
+>
+> If `keytool` is available in your environment, delete `tools/debug.keystore`
+> and build once more -- the scripts will generate a fresh key that's yours
+> alone. Do this before any real release or before handing the APK to anyone
+> else, or switch to your own release keystore and back up its private key and
+> password securely.
 
 ## Producing a single-file executable
 
