@@ -7,6 +7,8 @@
 
 - `npx @drxiaozhi/minapk /path/to/your.elf` 把 elf 路徑當位置參數傳入即可（詳細說明在後面）
 
+- 原始碼：[github.com/jjtseng93/minapk](https://github.com/jjtseng93/minapk)
+
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
 ## 0. 安裝依賴
@@ -180,6 +182,17 @@ npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
 `--no-back-to-console` 不用帶值，出現就把 `buninu.backToConsole` 設成 `false`（預設 `true`）：在 app WebView 而且它自己沒有上一頁可回時，按返回鍵會走離開 App 那條路，而不是切回 console WebView。「離開」在哪個 WebView 按都一樣要先過確認對話框——這個欄位只決定要不要先繞去 console，不會讓返回鍵變成不問就直接退出。合併規則跟 `-c`／`--no-shell` 完全一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
 
 這個欄位是**由 Android 端的 App 讀的**，不是 Buninu 自己讀的，所以在 APK 以外的地方設它不會有任何效果。App 端讀不到檔案、JSON 壞掉、沒有這個欄位、值不是布林，一律當成 `true`（回到 console），不會因此丟出任何錯誤。
+
+### 用 `--hide-extra-keys` 預設隱藏額外按鍵列
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf --hide-extra-keys
+```
+
+`--hide-extra-keys` 不用帶值，出現就把 `buninu.hideExtraKeys` 設成
+`true`（預設 `false`）。App 啟動時會隱藏額外按鍵列，之後仍可從音量鍵
+選單正常切換顯示。它與 `-c`、`--no-shell`、`--no-back-to-console` 和
+`--config` 的合併規則相同，其餘欄位都不動。
 
 ### 用 `-b`/`--bun-bin` 指定要封裝進 APK 的 Bun
 

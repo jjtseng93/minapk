@@ -232,8 +232,9 @@ public class MainActivity extends Activity {
     // key does on the app WebView once it has no page of its own left to go
     // back to: switch to the console (true, the default) or fall through to
     // the system's own back behavior and leave the app (false). Read once at
-    // startup; see readBackToConsole for why nothing here can fail.
+    // startup; see readBuninuUiConfig for why nothing here can fail.
     private volatile boolean backToConsole = true;
+    private volatile boolean hideExtraKeys = false;
 
     private boolean urlLoaded = false;
     private String lastExternalUrl;
@@ -819,7 +820,7 @@ public class MainActivity extends Activity {
                     // After the payload settles, so this reads whatever
                     // package.json the app is actually going to run with --
                     // including one a payload update just replaced.
-                    readBackToConsole(home);
+                    readBuninuUiConfig(home);
 
                     String nativeLibDir = getApplicationInfo().nativeLibraryDir;
                     File bunFile = new File(nativeLibDir, "libbun.so");
@@ -1767,9 +1768,10 @@ public class MainActivity extends Activity {
     }
 
     // Deliberately incapable of failing: a missing or unreadable file,
-    // malformed JSON, no "buninu" object, no "backToConsole" key, or a value
-    // that is not a boolean all leave the default (true -- back returns to
-    // the console) exactly as it was. This runs on the Bun-startup thread and
+    // malformed JSON, no "buninu" object, absent keys, or values that are not
+    // booleans leave the defaults (back returns to the console and the extra
+    // keys are visible) exactly as they were. This runs on the Bun-startup
+    // thread and
     // its result is read from the main thread on a back press, so an
     // exception escaping here would either kill that thread partway through
     // startup or, worse, surface as a crash on a key press; there is no
@@ -1778,7 +1780,7 @@ public class MainActivity extends Activity {
     // from being pulled into memory in one piece.
     private static final int PACKAGE_JSON_MAX_BYTES = 1 << 20;
 
-    private void readBackToConsole(File home) {
+    private void readBuninuUiConfig(File home) {
         try {
             File config = new File(home, "package.json");
             if (!config.isFile() || config.length() > PACKAGE_JSON_MAX_BYTES) return;
@@ -1796,8 +1798,14 @@ public class MainActivity extends Activity {
 
             JSONObject buninu = new JSONObject(new String(buffer, 0, read, "UTF-8"))
                 .optJSONObject("buninu");
-            if (buninu == null || buninu.isNull("backToConsole")) return;
-            backToConsole = buninu.optBoolean("backToConsole", true);
+            if (buninu == null) return;
+            if (!buninu.isNull("backToConsole"))
+                backToConsole = buninu.optBoolean("backToConsole", true);
+            if (!buninu.isNull("hideExtraKeys"))
+                hideExtraKeys = buninu.optBoolean("hideExtraKeys", false);
+            if (hideExtraKeys) runOnUiThread(new Runnable() {
+                @Override public void run() { extraKeysBar.setVisibility(View.GONE); }
+            });
         } catch (Throwable ignored) {
             // Keep the default. Not even logged: a config file that does not
             // say anything about this is the normal case, not an error.

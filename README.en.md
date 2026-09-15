@@ -7,6 +7,8 @@
 
 - `npx @drxiaozhi/minapk /path/to/your.elf` -- just pass the elf path as a positional argument (details below)
 
+- Source: [github.com/jjtseng93/minapk](https://github.com/jjtseng93/minapk)
+
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
 ## 0. Install dependencies
@@ -261,6 +263,18 @@ anywhere outside an APK does nothing. A file the app cannot read, broken JSON,
 a missing field, or a non-boolean value are all treated as `true` (back
 returns to the console), so nothing about it can fail in a way that leaves the
 back key broken.
+
+### Start with the extra-keys bar hidden using `--hide-extra-keys`
+
+```sh
+npx @drxiaozhi/minapk /path/to/your.elf --hide-extra-keys
+```
+
+`--hide-extra-keys` takes no value; its presence sets
+`buninu.hideExtraKeys` to `true` (default `false`). The app starts with the
+extra-keys bar hidden, while the volume-key menu can still toggle it normally.
+It composes with `-c`, `--no-shell`, `--no-back-to-console`, and `--config`,
+leaving every other field alone.
 
 ### Choose the Bun packaged into the APK with `-b`/`--bun-bin`
 

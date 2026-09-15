@@ -30,6 +30,8 @@ Options:
   --no-back-to-console     Clear buninu.backToConsole so the back key leaves the
                            app from the app WebView instead of switching back to
                            the console WebView (composes with --config)
+  --hide-extra-keys        Set buninu.hideExtraKeys so the extra-keys bar starts
+                           hidden (composes with --config)
   -n, --appname <name>     Override the app/APK name for this build (default: appname.txt)
   -p, --pkgname <pkgname>  Override the Android package name for this build (default: pkgname.txt)
   -b, --bun-bin <path>     Copy this Bun binary over libbun.so before building, replacing
@@ -70,7 +72,7 @@ async function handleInformationArguments(arguments_) {
 }
 
 function parseArguments(argv) {
-  const result = { elf: null, configPath: null, command: null, noShell: false, noBackToConsole: false, appName: null, pkgName: null, bunBin: null };
+  const result = { elf: null, configPath: null, command: null, noShell: false, noBackToConsole: false, hideExtraKeys: false, appName: null, pkgName: null, bunBin: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--config") {
@@ -90,6 +92,8 @@ function parseArguments(argv) {
       result.noShell = true;
     } else if (argument === "--no-back-to-console") {
       result.noBackToConsole = true;
+    } else if (argument === "--hide-extra-keys") {
+      result.hideExtraKeys = true;
     } else if (argument === "-n" || argument === "--appname") {
       result.appName = argv[index + 1];
       if (!result.appName) fail("-n/--appname requires a name");
@@ -225,11 +229,11 @@ async function ensureBuninuPayload() {
 //
 // The base package.json is `--config`'s file when given, otherwise the one
 // already inside the payload (freshly exported above); `-c`/`--command`,
-// `--no-shell` and `--no-back-to-console`, when given, are then patched into
-// that base's `buninu.command`, `buninu.exitAfterCmd` and
-// `buninu.backToConsole` before appending, so the flags compose instead of
-// being mutually exclusive.
-async function applyPackagePatch(tgzPath, { configPath, command, noShell, noBackToConsole }) {
+// `--no-shell`, `--no-back-to-console` and `--hide-extra-keys`, when given,
+// are then patched into that base's `buninu.command`, `buninu.exitAfterCmd`,
+// `buninu.backToConsole` and `buninu.hideExtraKeys` before appending, so the
+// flags compose instead of being mutually exclusive.
+async function applyPackagePatch(tgzPath, { configPath, command, noShell, noBackToConsole, hideExtraKeys }) {
   const tar = Bun.gunzipSync(new Uint8Array(await Bun.file(tgzPath).arrayBuffer()));
 
   const existingFiles = await new Bun.Archive(tar).files();
@@ -249,7 +253,7 @@ async function applyPackagePatch(tgzPath, { configPath, command, noShell, noBack
   }
 
   let packageJsonText = baseText;
-  if (command !== null || noShell || noBackToConsole) {
+  if (command !== null || noShell || noBackToConsole || hideExtraKeys) {
     let parsed;
     try {
       parsed = JSON.parse(baseText);
@@ -264,6 +268,7 @@ async function applyPackagePatch(tgzPath, { configPath, command, noShell, noBack
     // missing, unreadable, or non-boolean value as true as well, so the flag
     // has to write an explicit false to mean anything at all.
     if (noBackToConsole) parsed.buninu.backToConsole = false;
+    if (hideExtraKeys) parsed.buninu.hideExtraKeys = true;
     packageJsonText = `${JSON.stringify(parsed, null, 2)}\n`;
   } else if (configPath) {
     try {
@@ -293,13 +298,14 @@ async function applyPackagePatch(tgzPath, { configPath, command, noShell, noBack
       (configPath ? ` (base: ${configPath})` : " (base: payload's own package.json)") +
       (command !== null ? " [buninu.command patched]" : "") +
       (noShell ? " [buninu.exitAfterCmd patched]" : "") +
-      (noBackToConsole ? " [buninu.backToConsole patched]" : ""),
+      (noBackToConsole ? " [buninu.backToConsole patched]" : "") +
+      (hideExtraKeys ? " [buninu.hideExtraKeys patched]" : ""),
   );
 }
 
 if (await handleInformationArguments(process.argv.slice(2))) process.exit(0);
 
-const { elf: elfArgument, configPath, command, noShell, noBackToConsole, appName, pkgName, bunBin } = parseArguments(process.argv.slice(2));
+const { elf: elfArgument, configPath, command, noShell, noBackToConsole, hideExtraKeys, appName, pkgName, bunBin } = parseArguments(process.argv.slice(2));
 const elfPath = elfArgument ? resolveElfPath(elfArgument) : null;
 const bunBinPath = bunBin ? resolveBunBinPath(bunBin) : null;
 
@@ -307,9 +313,9 @@ const buildScript = resolve(rootDir, "build.sh");
 if (!existsSync(buildScript)) fail(`build script not found: ${buildScript}`);
 
 const buildArguments = [];
-if (configPath || command !== null || noShell || noBackToConsole) {
+if (configPath || command !== null || noShell || noBackToConsole || hideExtraKeys) {
   const tgzPath = await ensureBuninuPayload();
-  await applyPackagePatch(tgzPath, { configPath, command, noShell, noBackToConsole });
+  await applyPackagePatch(tgzPath, { configPath, command, noShell, noBackToConsole, hideExtraKeys });
   buildArguments.push(tgzPath);
 }
 

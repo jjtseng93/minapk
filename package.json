@@ -4,6 +4,26 @@
   "description": "Build Android APKs from Bun Single-file executables or source code",
   "license": "MIT",
   "author": "Dr. John (醫者小智)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjtseng93/minapk.git"
+  },
+  "homepage": "https://github.com/jjtseng93/minapk#readme",
+  "bugs": {
+    "url": "https://github.com/jjtseng93/minapk/issues"
+  },
+  "keywords": [
+    "bun",
+    "android",
+    "apk",
+    "apk-builder",
+    "single-executable",
+    "packaging",
+    "gradle-free",
+    "webview",
+    "terminal",
+    "buninu"
+  ],
   "type": "module",
   "publishConfig": {
     "access": "public"
