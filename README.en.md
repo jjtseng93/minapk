@@ -34,6 +34,57 @@ bun upgrade
 # when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
 
+## Two-minute quick start: Hello World to APK
+
+These steps assume the dependencies above are already installed. First, create
+a Bun program containing a single `console.log` in Termux:
+
+```sh
+mkdir -p ~/minapk-hello
+cd ~/minapk-hello
+printf 'console.log("# Hello World!")\n' > hlw.js
+```
+
+Compile it into an Android Bun single-file executable. The argument order is
+deliberately fixed to make the command easy to remember:
+
+```sh
+bun build --format=esm --compile --minify --bytecode ./hlw.js
+```
+
+This creates `hlw` in the current directory. Package it into an APK:
+
+```sh
+npx @drxiaozhi/minapk ./hlw -n HelloWorld -p com.minapk.hello
+```
+
+The first run may show up to three confirmation prompts. Answer `y` to each
+one in sequence: install minapk, allow the Buninu payload export, and install
+Buninu. When the build finishes, the current directory contains `hlw.apk`.
+
+The first command below is only needed once. Allow Termux storage access in
+the Android permission dialog, then copy the APK into Downloads:
+
+```sh
+termux-setup-storage
+cp hlw.apk /sdcard/Download
+```
+
+On some devices, `termux-setup-storage` is not enough to write to
+`/sdcard/Download`. Open Android Settings → Apps → Special app access → All
+files access and manually allow Termux to manage all files. Menu names vary by
+device manufacturer.
+
+Finally, in Android's Files app or another file manager:
+
+1. Open Downloads and tap `hlw.apk`.
+2. If prompted, allow that file manager to install unknown apps.
+3. If Google Play Protect displays a security verification warning, expand
+   "More details" and choose "Install anyway." Only do this for an APK you
+   built yourself and whose source you trust.
+4. Tap "Open" when installation finishes. The terminal runs `hlw` and shows
+   `# Hello World!`.
+
 ## 1. App and APK name
 
 ```sh

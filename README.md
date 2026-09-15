@@ -34,6 +34,56 @@ bun upgrade
 # when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
 
+## 兩分鐘快速開始：從 Hello World 到 APK
+
+以下步驟假設上一節的依賴都已安裝完成。先在 Termux 建立一個只有
+`console.log` 的 Bun 程式：
+
+```sh
+mkdir -p ~/minapk-hello
+cd ~/minapk-hello
+printf 'console.log("# Hello World!")\n' > hlw.js
+```
+
+把它編譯成 Android Bun 單一可執行檔。這組參數的順序可以用
+「寶寶非常明白」（`bbfcmb`）記憶：`bun build` 是 `bb`，後面依序是
+`format`、`compile`、`minify`、`bytecode`（`fcmb`）。
+
+```sh
+bun build --format=esm --compile --minify --bytecode ./hlw.js
+```
+
+目前目錄會出現 `hlw`，接著用 minapk 把它包進 APK：
+
+```sh
+npx @drxiaozhi/minapk ./hlw -n HelloWorld -p com.minapk.hello
+```
+
+第一次執行時可能會出現最多三次確認提示，依序全部輸入 `y`：安裝
+minapk、允許匯出 Buninu payload，以及安裝 Buninu。完成後目前目錄會得到
+`hlw.apk`。
+
+第一次讓 Termux 存取共享儲存空間時，執行下面第一行並在 Android 權限視窗
+選擇允許；已授權過就不必再執行。然後把 APK 複製到下載資料夾：
+
+```sh
+termux-setup-storage
+cp hlw.apk /sdcard/Download
+```
+
+部分裝置執行 `termux-setup-storage` 後仍不能寫入 `/sdcard/Download`，需要到
+Android「設定」→「應用程式」→「特殊應用程式權限」→「管理所有檔案」中，
+手動允許 Termux 管理所有檔案；不同廠牌的選單名稱可能略有不同。
+
+最後在 Android 的「檔案」或其他檔案管理器中：
+
+1. 打開「下載」並點選 `hlw.apk`。
+2. 第一次從這個檔案管理器安裝時，依提示允許「安裝未知應用程式」。
+3. 若 Google Play Protect 顯示安全驗證警告，展開「更多詳細資料」並選擇
+   「仍要安裝」。只應對你自己建置、且確認來源的 APK 這樣做。
+4. 安裝完成後點「開啟」。終端機畫面會執行 `hlw` 並顯示
+   `# Hello World!`。
+
 ## 1. 應用程式名稱與 APK 名稱
 
 ```sh
