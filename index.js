@@ -13,35 +13,56 @@ function fail(message) {
 }
 
 function usage() {
-  return `${pkg.name} - ${pkg.description}
+  return `
+${pkg.name}
+  Build Android APKs from Bun
+  single-file executables or source code
 
 Usage:
-  ${pkg.name} [/path/to/your.elf] [options]
+  minapk [elf] [options]
 
-Options:
-  -h, --help               Show this help and exit
-  -V, --version            Show version and runtime information, then exit
-  --readme                 Render README.md in the terminal and exit
-  --config <package.json>  Completely replace the Buninu package.json packaged into the APK
-  -c, --command <command>  Override buninu.command for this build (composes with --config)
-  --no-shell               Set buninu.exitAfterCmd so the shell/PTY exits after
-                           buninu.command instead of falling back to an
-                           interactive shell (composes with --config)
-  --no-back-to-console     Clear buninu.backToConsole so the back key leaves the
-                           app from the app WebView instead of switching back to
-                           the console WebView (composes with --config)
-  --hide-extra-keys        Set buninu.hideExtraKeys so the extra-keys bar starts
-                           hidden (composes with --config)
-  -n, --appname <name>     Override the app/APK name for this build (default: appname.txt)
-  -p, --pkgname <pkgname>  Override the Android package name for this build (default: pkgname.txt)
-  -b, --bun-bin <path>     Copy this Bun binary over libbun.so before building, replacing
-                           the Bun packaged into the APK (persistent, unlike the options
-                           above). Its revision is printed while packaging.
+Info options:
+  -h, --help
+    Show this help and exit
+  -V, --version
+    Show version and runtime information
+    Then exit
+  --readme
+    Render README.md and exit
+    
+Buninu userspace config:
+  --config <package.json>
+    Replace the packaged Buninu config
+    
+  -c, --command <command>
+    Override buninu.command
+    Composes with --config
+    
+  --no-shell
+    Exit after buninu.command instead of
+    opening an interactive shell
+  --no-back-to-console
+    On back, leave the app instead of
+    returning to the console WebView
+  --hide-extra-keys
+    Start with the extra-keys bar hidden
+    
+Android app config:
+  -n, --appname <name>
+    Set the app and APK name
+    Default: appname.txt
+  -p, --pkgname <pkgname>
+    Set the Android package name
+    Default: pkgname.txt
+  -b, --bun-bin <path>
+    Replace the packaged Bun binary
+    This change persists across builds
 
-Without a path to an elf, this builds using the project root's existing
-libmain.so (if any) and appname.txt/pkgname.txt as-is. On success, the
-resulting APK is copied to the current directory as <appname>.apk, or
-<elf name>.apk when an elf was given.
+Without an elf, the existing
+libmain.so is used.
+The APK is copied to the current
+directory as <appname>.apk, or <elf>.apk
+when an elf was given.
 `;
 }
 
