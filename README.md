@@ -3,7 +3,7 @@
 - [English Readme](README.en.md)
 - 把你的Bun單一可執行檔 包成APK
 
-- minapk 是一個不使用 Gradle 的 Android APK 建置專案，以命令列工具完成資源處理、Java 編譯、R8/DEX、APK 封裝、zipalign 與簽章，並將 [Buninu](https://www.npmjs.com/package/buninu) 執行環境放入 APK。
+- minapk 是一個不使用 Gradle 的 Android APK 建置專案，以命令列工具完成資源處理、Java 編譯、R8/DEX、APK 封裝、zipalign 與簽章，並將 [Buninu 幫你牛使用者空間](https://www.npmjs.com/package/buninu) 執行環境放入 APK。
 
 - `npx @drxiaozhi/minapk /path/to/your.elf` 把 elf 路徑當位置參數傳入即可（詳細說明在後面）
 
@@ -14,7 +14,7 @@
 > 以下內容從建置 APK 開始。如果你已經裝好 APK，只想知道裡面怎麼操作，
 > 請直接前往 [User manual: inside the APK](#user-manual-inside-the-apk)。
 
-## 0. 安裝依賴
+## 安裝依賴
 
 ### Termux
 
@@ -37,7 +37,7 @@ bun upgrade
 # when running the build you need to see something like this: libbun.so not found; copying from: /usr/local/lib/node_modules/@oven/bun-linux-aarch64-android/bin/bun
 ```
 
-## 兩分鐘快速開始：從 Hello World 到 APK
+## 兩分鐘快速開始-你好世界專案
 
 以下步驟假設上一節的依賴都已安裝完成。先在 Termux 建立一個只有
 `console.log` 的 Bun 程式：
@@ -87,7 +87,7 @@ Android「設定」→「應用程式」→「特殊應用程式權限」→「�
 4. 安裝完成後點「開啟」。終端機畫面會執行 `hlw` 並顯示
    `# Hello World!`。
 
-## 1. 應用程式名稱與 APK 名稱
+## 應用程式名稱與輸出檔案名稱
 
 ```sh
 npx @drxiaozhi/minapk -n MyApp
@@ -101,7 +101,7 @@ npx @drxiaozhi/minapk -n MyApp
 
 不帶 `-n` 時，會用專案根目錄 `appname.txt` 目前的值（`Hello2`）當預設；minapk 不會寫入或修改這個檔案，所以不帶 `-n` 的建置永遠得到同一個、可預期的名稱。
 
-## 2. Android package name
+## 安卓套件名稱
 
 ```sh
 npx @drxiaozhi/minapk -p com.drjohn.bunwv
@@ -117,7 +117,7 @@ npx @drxiaozhi/minapk -p com.drjohn.bunwv
 
 不帶 `-p` 時，會用專案根目錄 `pkgname.txt` 目前的值（`com.drjohn.bunwv`）當預設，同樣不會被 minapk 寫入或修改。
 
-## 3. 建置
+## 建置步驟
 
 ```sh
 npx @drxiaozhi/minapk [/path/to/your.elf]
@@ -177,15 +177,15 @@ npm run clean
 bun ./clean.js
 ```
 
-## 4. 進階設定
+## 進階設定
 
-### 用 `--config` 完全取代封裝進 APK 的 Buninu `package.json`
+### 完全取代封裝進應用的設定檔
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf --config /path/to/package.json
 ```
 
-`--config` 指到的檔案會**完整取代**封裝進 APK 的 Buninu payload 裡的 `package.json`（是整份換掉，不是合併），可以用來自訂 `buninu.shell`、`buninu.command`、`buninu.exitAfterCmd` 等啟動設定，而不用去修改 `no_backup` 裡的原始檔案。
+`--config` 指到的檔案會**完全取代**封裝進 APK 的 Buninu payload 裡的 `package.json`（是整份換掉，不是合併），可以用來自訂 `buninu.shell`、`buninu.command`、`buninu.exitAfterCmd` 等啟動設定，而不用去修改 `no_backup` 裡的原始檔案。
 
 運作方式：
 
@@ -196,7 +196,7 @@ npx @drxiaozhi/minapk /path/to/your.elf --config /path/to/package.json
 > [!IMPORTANT]
 > `--config` 檔案必須是**完整**的 `package.json`（含 `name`/`version`/`scripts`/`bin` 等欄位），不是只寫 `buninu` 那一段，因為是整份取代、不是合併。可以先用 `npx buninu@latest --export-config` 產生一份完整的 `buninu.json` 當起點，直接拿來改 `buninu` 區段後當 `--config` 的輸入即可。
 
-### 用 `-c`/`--command` 做單項覆蓋
+### 指定應用內起始命令
 
 不想為了改一個欄位就手寫一份完整 `package.json`，可以只用這個旗標：
 
@@ -218,7 +218,7 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom startup command"
 - 有帶 `--config`：以 `--config` 檔案的內容當底，`-c` 只覆蓋其中的 `buninu.command`，其他欄位維持 `--config` 檔案原樣。
 - 沒帶 `--config`：以本次 export 出來、Buninu payload 裡原本的 `package.json` 當底，一樣只覆蓋 `buninu.command`，其餘欄位維持原樣，不需要另外準備 `--config` 檔案。
 
-### 用 `--no-shell` 停用「指令跑完掉回互動式 shell」
+### 停用-指令跑完掉回互動式指令行
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
@@ -226,7 +226,7 @@ npx @drxiaozhi/minapk /path/to/your.elf -c "echo custom command" --no-shell
 
 `--no-shell` 不用帶值，出現就把 `buninu.exitAfterCmd` 設成 `true`（預設 `false`，見 [Buninu README](https://www.npmjs.com/package/buninu) 的 `exitAfterCmd` 說明）：`buninu.command` 執行完後直接結束，不會像預設那樣掉回互動式 shell。合併規則跟 `-c` 一樣——有 `--config` 就疊加在它上面，沒有就疊加在本次 export 出來的原始 `package.json` 上，其餘欄位都不動。
 
-### 用 `--no-back-to-console` 讓返回鍵直接離開 App
+### 返回鍵直接離開應用
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
@@ -236,7 +236,7 @@ npx @drxiaozhi/minapk /path/to/your.elf --no-back-to-console
 
 這個欄位是**由 Android 端的 App 讀的**，不是 Buninu 自己讀的，所以在 APK 以外的地方設它不會有任何效果。App 端讀不到檔案、JSON 壞掉、沒有這個欄位、值不是布林，一律當成 `true`（回到 console），不會因此丟出任何錯誤。
 
-### 用 `--hide-extra-keys` 預設隱藏額外按鍵列
+### 預設隱藏螢幕上額外按鍵列
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf --hide-extra-keys
@@ -247,7 +247,7 @@ npx @drxiaozhi/minapk /path/to/your.elf --hide-extra-keys
 選單正常切換顯示。它與 `-c`、`--no-shell`、`--no-back-to-console` 和
 `--config` 的合併規則相同，其餘欄位都不動。
 
-### 用 `-b`/`--bun-bin` 指定要封裝進 APK 的 Bun
+### 指定要封裝進應用的執行檔
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -b /path/to/android-arm64/bun
@@ -281,7 +281,7 @@ Packaged Bun (libbun.so) revision:
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
 ```
 
-## 只更新 Buninu payload
+## 只更新幫你牛使用者空間
 
 完成至少一次完整建置並已有根目錄 APK 後，可以執行：
 
@@ -309,7 +309,7 @@ Hello2.apk → Hello2r.apk
 /system/bin/sh ./repack.sh
 ```
 
-## Buninu payload 來源
+## 幫你牛使用者空間來源
 
 Buninu npm 套件：<https://www.npmjs.com/package/buninu>
 
@@ -360,7 +360,7 @@ bun no_backup/bin/init.js --export buninu.tgz
 內建指令的完整說明請見 Buninu 的
 [Commands inside the shell](https://github.com/jjtseng93/buninu#commands-inside-the-shell)。
 
-### 螢幕按鍵列
+### 螢幕上額外按鍵列
 
 建出來的 App 底部有一排終端機常用按鍵，很多鍵短按跟長按是不同功能：
 
@@ -380,13 +380,19 @@ bun no_backup/bin/init.js --export buninu.tgz
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
 
+### 音量鍵上選單
+
 實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡 eval JS、選取終端機文字、上一頁／下一頁、跳到指定網址、縮放、Eruda console、背景權限設定、切換 WebView（直接切到下一個，不再多一層選單；項目本身會標出要切去哪一個，例如 `Switch WebView → 1: app`）。
+
+### WebViews
 
 App 裡有兩個 WebView，從啟動就都存在、不會被建立或關閉：`0` 是 console（Buninu 起的 jsgotty 終端機），`1` 是 app WebView，一開始是空白的、擺在後面。按鍵列、音量鍵選單、返回鍵一律作用在**當前在前景的那一個** WebView 上，所以切換 WebView 就等於同時把這三者換過去。在 app WebView 沒有上一頁可回時按返回鍵，會切回 console 而不是結束 App——沒有任何東西被關掉，離開前景的那個 WebView 照樣繼續跑（這個行為由 `buninu.backToConsole` 決定，預設 `true`，見 `--no-back-to-console`）。切換的方式是音量鍵選單最後那個「Switch WebView →」項目（按下去就直接切，不會再問你要哪一個），或從 Buninu 裡呼叫下面的 `showWebView`。
 
+### 返回鍵
+
 返回鍵真的會離開 App 的那一步（console 也沒有上一頁可回時）會先跳出確認對話框。確認離開之後不只是關掉畫面：Buninu 行程、native bridge 的 socket 都會收掉，整個 App 行程結束，下次開啟是全新的一份。Buninu 是用 `bun --no-orphans` 啟動的，所以它自己 spawn 出去的 jsgotty、shell 也會跟著一起結束，不會留下孤兒行程；同一個旗標也讓 Buninu 在 App 行程被系統殺掉時自行退出。
 
-### Native bridge
+### 原生橋
 
 App 內建一座從 Buninu 通到 Android 原生層的橋（`no_backup/apps/native-bridge`），透過 `MainActivity` 開的一個 unix socket，把 Toast 與系統剪貼簿讀寫暴露給 Buninu 裡跑的 Bun 行程。Buninu 隨附的 `xclip` 指令（`apps/xclip`）就是建在這座橋上：
 
@@ -434,7 +440,7 @@ native-bridge currwv
 
 其他建置用 JAR 位於 `tools/`。
 
-## APK 簽章與 keytool
+## 應用簽章與金鑰工具
 
 `build.sh` 與 `repack.sh` 預設使用：
 
@@ -461,7 +467,7 @@ tools/debug.keystore
 bun upgrade
 ```
 
-### 途徑一：一行 `bun build`
+### 途徑一-一行建置
 
 `hlw.js`：
 
@@ -476,7 +482,7 @@ npx @drxiaozhi/minapk hlw
 
 得到 `hlw.apk`。輸出檔名不用指定，會自動去掉副檔名變成 `hlw`（Windows 上則是 `hlw.exe`）。
 
-### 途徑二：Markdown App
+### 途徑二-標記語言應用
 
 `hlw.md`：
 
