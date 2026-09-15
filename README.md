@@ -260,6 +260,8 @@ Hello2.apk → Hello2r.apk
 
 Buninu npm 套件：<https://www.npmjs.com/package/buninu>
 
+Buninu GitHub 原始碼：<https://github.com/jjtseng93/buninu>
+
 > [!IMPORTANT]
 > `buninu.tgz` **必須只有一個頂層資料夾**。App 解壓時會移除第一層
 >（`--strip-components=1`），再把其內容直接放入 Buninu home。

@@ -348,6 +348,8 @@ It can also be run explicitly with Android's system shell:
 
 Buninu npm package: <https://www.npmjs.com/package/buninu>
 
+Buninu GitHub source: <https://github.com/jjtseng93/buninu>
+
 > [!IMPORTANT]
 > `buninu.tgz` **must contain exactly one top-level directory**. The app strips
 > that first component during extraction (`--strip-components=1`) and places
