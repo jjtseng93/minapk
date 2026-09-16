@@ -9,12 +9,14 @@
 
 - 原始碼：[github.com/jjtseng93/minapk](https://github.com/jjtseng93/minapk)
 
+- Buninu 幫你牛使用者空間原始碼：[github.com/jjtseng93/buninu](https://github.com/jjtseng93/buninu)
+
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
 - [目錄](#目錄)
 
 > 以下內容從建置 APK 開始。如果你已經裝好 APK，只想知道裡面怎麼操作，
-> 請直接前往 [User manual: inside the APK](#user-manual-inside-the-apk)。
+> 請直接前往 [User Manual: Inside the APK](#user-manual-inside-the-apk)。
 
 ## 安裝依賴
 
@@ -356,7 +358,7 @@ bun no_backup/bin/init.js --export buninu.tgz
 
 若不存在，腳本會詢問是否執行 `npx buninu@latest --export`。只有明確輸入 `y` 或 `Y` 才會從 npm 匯出。
 
-## User manual: inside the APK
+## User Manual: Inside the APK
 
 這一區說明 APK 安裝並開啟後，使用者可以直接操作的功能。Buninu shell
 內建指令的完整說明請見 Buninu 的
@@ -597,7 +599,7 @@ minapk 建出來的 APK 目前是這樣執行的：
   * [指定要封裝進應用的執行檔](#指定要封裝進應用的執行檔)
 - [只更新幫你牛使用者空間](#只更新幫你牛使用者空間)
 - [幫你牛使用者空間來源](#幫你牛使用者空間來源)
-- [User manual: inside the APK](#user-manual-inside-the-apk)
+- [User Manual: Inside the APK](#user-manual-inside-the-apk)
   * [螢幕上額外按鍵列](#螢幕上額外按鍵列)
   * [音量鍵上選單](#音量鍵上選單)
   * [WebViews](#webviews)

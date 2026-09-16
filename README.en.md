@@ -9,11 +9,15 @@
 
 - Source: [github.com/jjtseng93/minapk](https://github.com/jjtseng93/minapk)
 
+- Buninu userspace source: [github.com/jjtseng93/buninu](https://github.com/jjtseng93/buninu)
+
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
+
+- [Table of contents](#contents)
 
 > The following sections start with building the APK. If it is already
 > installed and you only want to learn how to use it, jump directly to the
-> [user manual inside the APK](#user-manual-inside-the-apk).
+> [User Manual: Inside the APK](#user-manual-inside-the-apk).
 
 ## Install dependencies
 
@@ -26,7 +30,7 @@ npm install -g bun
 bun upgrade
 ```
 
-### Debian / Ubuntu（apt）arm64 inside Termux proot
+### Debian/Ubuntu arm64 inside Termux proot
 
 ```sh
 apt update
@@ -453,7 +457,7 @@ bun no_backup/bin/init.js --export buninu.tgz
 Otherwise, the script asks whether to run `npx buninu@latest --export`. It
 downloads from npm only after an explicit `y` or `Y` response.
 
-## User manual: inside the APK
+## User Manual: Inside the APK
 
 This section covers features available after installing and opening the APK.
 For the complete reference to commands provided inside the Buninu shell, see
@@ -815,6 +819,40 @@ time like that is exactly what review scrutinizes most.
   `libmain.so`'s standalone graph or `BUN_BE_BUN` behavior misbehaves, an
   independent `libbun.so` is still there), and sharing one file needs to
   weigh giving up that safety net
+
+## Contents
+
+- [Install dependencies](#install-dependencies)
+  * [Termux](#termux)
+  * [Debian/Ubuntu arm64 inside Termux proot](#debianubuntu-arm64-inside-termux-proot)
+- [Two-minute quick start: Hello World to APK](#two-minute-quick-start-hello-world-to-apk)
+- [App name and output filename](#app-name-and-output-filename)
+- [Android package name](#android-package-name)
+- [Build steps](#build-steps)
+- [Advanced configuration](#advanced-configuration)
+  * [Replace the Buninu `package.json` packaged into the APK with `--config`](#replace-the-buninu-packagejson-packaged-into-the-apk-with-config)
+  * [Single-field override with `-c`/`--command`](#single-field-override-with-c-command)
+  * [Disable the fall-back-to-shell behavior with `--no-shell`](#disable-the-fall-back-to-shell-behavior-with-no-shell)
+  * [Leave the app on back with `--no-back-to-console`](#leave-the-app-on-back-with-no-back-to-console)
+  * [Start with the extra-keys bar hidden using `--hide-extra-keys`](#start-with-the-extra-keys-bar-hidden-using-hide-extra-keys)
+  * [Choose the Bun packaged into the APK with `-b`/`--bun-bin`](#choose-the-bun-packaged-into-the-apk-with-b-bun-bin)
+- [Update only the Buninu payload](#update-only-the-buninu-payload)
+- [Buninu payload source](#buninu-payload-source)
+- [User Manual: Inside the APK](#user-manual-inside-the-apk)
+  * [On-screen key bar](#on-screen-key-bar)
+  * [Volume Up menu](#volume-up-menu)
+  * [WebViews](#webviews)
+  * [Back button](#back-button)
+  * [Native bridge](#native-bridge)
+- [Main external tools](#main-external-tools)
+- [APK signing and keytool](#apk-signing-and-keytool)
+- [Producing a single-file executable](#producing-a-single-file-executable)
+  * [Route 1: a one-line `bun build`](#route-1-a-one-line-bun-build)
+  * [Route 2: a Markdown app](#route-2-a-markdown-app)
+- [Google Play distribution and policy](#google-play-distribution-and-policy)
+  * [The policy side](#the-policy-side)
+- [Roadmap](#roadmap)
+- [License](#license)
 
 ## License
 
