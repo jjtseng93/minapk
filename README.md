@@ -13,7 +13,9 @@
 
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
-- [目錄](#目錄)
+---
+
+- [目錄(完整章節導覽)](#目錄)
 
 > 以下內容從建置 APK 開始。如果你已經裝好 APK，只想知道裡面怎麼操作，
 > 請直接前往 [User Manual: Inside the APK](#user-manual-inside-the-apk)。

@@ -13,6 +13,8 @@
 
 - This project is derived from [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab).
 
+---
+
 - [Table of contents](#contents)
 
 > The following sections start with building the APK. If it is already
