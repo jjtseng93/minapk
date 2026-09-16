@@ -29,6 +29,8 @@ Info options:
     Then exit
   --readme
     Render README.md and exit
+  --readme-en
+    Render README.en.md and exit
     
 Buninu userspace config:
   --config <package.json>
@@ -80,8 +82,9 @@ async function handleInformationArguments(arguments_) {
     return true;
   }
 
-  if (arguments_.includes("--readme")) {
-    const readmePath = resolve(rootDir, "README.md");
+  if (arguments_.includes("--readme") || arguments_.includes("--readme-en")) {
+    const readmeName = arguments_.includes("--readme-en") ? "README.en.md" : "README.md";
+    const readmePath = resolve(rootDir, readmeName);
     if (!existsSync(readmePath)) fail(`README not found: ${readmePath}`);
     const markdown = await Bun.file(readmePath).text();
     process.stdout.write(Bun.markdown.ansi(markdown, { hyperlinks: true }));
