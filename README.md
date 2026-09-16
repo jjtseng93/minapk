@@ -11,6 +11,8 @@
 
 - 本專案衍生自 [Promastergame/tinyapk-lab](https://github.com/Promastergame/tinyapk-lab)。
 
+- [目錄](#目錄)
+
 > 以下內容從建置 APK 開始。如果你已經裝好 APK，只想知道裡面怎麼操作，
 > 請直接前往 [User manual: inside the APK](#user-manual-inside-the-apk)。
 
@@ -25,7 +27,7 @@ npm install -g bun
 bun upgrade
 ```
 
-### Debian / Ubuntu（apt）arm64 inside Termux proot
+### Debian/Ubuntu arm64 inside Termux proot
 
 ```sh
 apt update
@@ -538,7 +540,7 @@ npx @drxiaozhi/minapk mdcui
 
 `checkAns` 是純前端的答案比對；`whereAmI` 則透過 `await rpc.sysinfo()` 呼叫到 `js back` 區塊，回報這個 app 現在跑在哪裡。同一個執行檔在 Termux 裡直接跑會顯示 `(not inside an APK)`，包成 APK 裝起來之後，同樣那顆按鈕就會顯示 Buninu home 與 Android app 私有目錄的實際路徑。
 
-## Google Play 上架與政策
+## Google Play
 
 > [!IMPORTANT]
 > minapk 建出來的 APK **不是一個可以直接上架的成品**。以下兩點是機制上的硬限制，跟政策解讀無關，照現況直接丟上 Play Console 就會被擋下來：
@@ -576,6 +578,40 @@ minapk 建出來的 APK 目前是這樣執行的：
   * npx @drxiaozhi/minapk myapp.md
 - ~~原生 bridge（架構還在設計中）~~（已完成：`native-bridge`／`xclip`／`tts`，目前有 toast、剪貼簿、TTS；缺的是繼續暴露更多 Android 能力，見下）
 - `BUN_BE_BUN` 機制：`libmain.so` 本質上是「Bun 執行檔本體 + 附加上去的 standalone module graph」（`bun build --compile` 的輸出），正常執行會直接偵測並啟動內嵌的 app。Bun 官方文件（single-file executable）記載了 `BUN_BE_BUN=1` 這個環境變數，設定後同一個檔案會改成表現得像單純的 `bun` CLI、跳過 standalone graph 偵測。理論上可以拿 `libmain.so` 兼職當作 `libbun.so` 用（呼叫時帶 `BUN_BE_BUN=1`），不用再額外打包一份完整 Bun 執行檔，省下可觀的 APK 空間。架構還沒定案——目前 `libbun.so`／`libmain.so` 各自一份的好處是彼此可以互相 fallback（例如 `libmain.so` 的 standalone graph 或 `BUN_BE_BUN` 行為出狀況時還有獨立的 `libbun.so` 可用），改成共用一份就要想清楚失去這層保險的取捨
+
+## 目錄
+
+- [安裝依賴](#安裝依賴)
+  * [Termux](#termux)
+  * [Debian / Ubuntu arm64 inside Termux proot](#debianubuntu-arm64-inside-termux-proot)
+- [兩分鐘快速開始-你好世界專案](#兩分鐘快速開始-你好世界專案)
+- [應用程式名稱與輸出檔案名稱](#應用程式名稱與輸出檔案名稱)
+- [安卓套件名稱](#安卓套件名稱)
+- [建置步驟](#建置步驟)
+- [進階設定](#進階設定)
+  * [完全取代封裝進應用的設定檔](#完全取代封裝進應用的設定檔)
+  * [指定應用內起始命令](#指定應用內起始命令)
+  * [停用-指令跑完掉回互動式指令行](#停用-指令跑完掉回互動式指令行)
+  * [返回鍵直接離開應用](#返回鍵直接離開應用)
+  * [預設隱藏螢幕上額外按鍵列](#預設隱藏螢幕上額外按鍵列)
+  * [指定要封裝進應用的執行檔](#指定要封裝進應用的執行檔)
+- [只更新幫你牛使用者空間](#只更新幫你牛使用者空間)
+- [幫你牛使用者空間來源](#幫你牛使用者空間來源)
+- [User manual: inside the APK](#user-manual-inside-the-apk)
+  * [螢幕上額外按鍵列](#螢幕上額外按鍵列)
+  * [音量鍵上選單](#音量鍵上選單)
+  * [WebViews](#webviews)
+  * [返回鍵](#返回鍵)
+  * [原生橋](#原生橋)
+- [主要外部工具](#主要外部工具)
+- [應用簽章與金鑰工具](#應用簽章與金鑰工具)
+- [產生單一可執行檔](#產生單一可執行檔)
+  * [途徑一-一行建置](#途徑一-一行建置)
+  * [途徑二-標記語言應用](#途徑二-標記語言應用)
+- [Google Play 上架與政策](#google-play)
+  * [政策面](#政策面)
+- [未來規劃](#未來規劃)
+- [License](#license)
 
 ## License
 
