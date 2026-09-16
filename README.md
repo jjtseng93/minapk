@@ -156,8 +156,8 @@ bun ./index.js
 - 封裝原生函式庫前，若專案根目錄沒有 `libbun.so`，會執行
 `which bun`，並將找到的 Bun 複製為根目錄的 `libbun.so`；找不到 Bun
 或複製失敗時會停止建置。該 Bun 必須是可在目標 Android arm64 環境
-執行的版本。要明確指定用哪一份 Bun、而不是交給 `PATH` 決定，見第 4 節的
-`-b`/`--bun-bin`。
+執行的版本。要明確指定用哪一份 Bun、而不是交給 `PATH` 決定，見
+[指定要封裝進應用的執行檔](#指定要封裝進應用的執行檔)的 `-b`/`--bun-bin`。
 
 > [!IMPORTANT]
 > 這個 `which bun` 只在 `libbun.so` **不存在時**跑一次。複製過去之後，
@@ -281,7 +281,9 @@ Packaged Bun (libbun.so) revision:
   1.4.0-canary.1+41c3f6fdb
 ```
 
-`-c`/`--no-shell`/`--no-back-to-console`/`--config`/`-b` 可以跟 `-n`/`-p`（第 1、2 節）以及 elf 位置參數任意組合，例如：
+`-c`/`--no-shell`/`--no-back-to-console`/`--config`/`-b` 可以跟
+[`-n`](#應用程式名稱與輸出檔案名稱)／[`-p`](#安卓套件名稱)以及 elf
+位置參數任意組合，例如：
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell

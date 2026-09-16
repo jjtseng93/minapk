@@ -191,7 +191,8 @@ internally; it is a POSIX shell script and needs a `/bin/sh` (or Android's
 root, the build runs `which bun` and copies the discovered Bun to
 `./libbun.so`. The build stops if Bun cannot be found or copied. That Bun must
 be executable on the target Android arm64 environment. To name the Bun to use
-explicitly instead of letting `PATH` decide, see `-b`/`--bun-bin` in section 4.
+explicitly instead of letting `PATH` decide, see `-b`/`--bun-bin` under
+[Choose the Bun packaged into the APK](#choose-the-bun-packaged-into-the-apk-with-b-bun-bin).
 
 > [!IMPORTANT]
 > That `which bun` runs only while `libbun.so` is **missing**. Once it has
@@ -370,8 +371,8 @@ Packaged Bun (libbun.so) revision:
 ```
 
 `-c`/`--no-shell`/`--no-back-to-console`/`--config`/`-b` can be combined
-freely with `-n`/`-p`
-(sections 1 and 2) and the elf positional argument, for example:
+freely with [`-n`](#app-name-and-output-filename),
+[`-p`](#android-package-name), and the elf positional argument, for example:
 
 ```sh
 npx @drxiaozhi/minapk /path/to/your.elf -n MyApp -p com.example.myapp -c "echo hello" --no-shell
