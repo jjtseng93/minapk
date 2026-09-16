@@ -602,6 +602,20 @@ The same bridge also covers Text-To-Speech(tts): `tts "hello"` speaks text and w
 it to finish, `-a` returns immediately instead. Without the app it falls
 back to desktop commands (`espeak-ng`/`say`/PowerShell) instead.
 
+### Optional external tools
+
+`bunproot` is an optional tool downloaded by the user through `bunx` and is
+licensed under GPL-2.0-or-later; `js-udocker` is licensed under Apache-2.0.
+Neither is distributed with minapk or the APK it produces.
+
+```sh
+bunx bunproot --git clone https://github.com/jjtseng93/js-udocker
+cd js-udocker
+export JS_UDOCKER_BUNPROOT=$HOME/.bun/bin/bunproot
+bun udocker.js run --name=ap alpine
+# bun udocker.js ps
+```
+
 ## Main external tools
 
 - Bun
@@ -847,6 +861,7 @@ time like that is exactly what review scrutinizes most.
   * [WebViews](#webviews)
   * [Back button](#back-button)
   * [Native bridge](#native-bridge)
+  * [Optional external tools](#optional-external-tools)
 - [Main external tools](#main-external-tools)
 - [APK signing and keytool](#apk-signing-and-keytool)
 - [Producing a single-file executable](#producing-a-single-file-executable)

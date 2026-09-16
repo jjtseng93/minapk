@@ -437,6 +437,20 @@ native-bridge currwv
 
 同一座橋也接了語音朗讀：`tts "hello"` 會唸出文字並等講完才結束，`-a` 不等直接返回。沒有 App 可用時會退回 `espeak-ng`/`say`/PowerShell 等桌面平台指令，一樣可以用。
 
+### 可選外部工具
+
+`bunproot` 是使用者執行 `bunx` 後自行下載的可選工具，採用
+GPL-2.0-or-later；`js-udocker` 採用 Apache-2.0。兩者都不隨 minapk 或產生的
+APK 一起散布。
+
+```sh
+bunx bunproot --git clone https://github.com/jjtseng93/js-udocker
+cd js-udocker
+export JS_UDOCKER_BUNPROOT=$HOME/.bun/bin/bunproot
+bun udocker.js run --name=ap alpine
+# bun udocker.js ps
+```
+
 ## 主要外部工具
 
 - Bun
@@ -609,6 +623,7 @@ minapk 建出來的 APK 目前是這樣執行的：
   * [WebViews](#webviews)
   * [返回鍵](#返回鍵)
   * [原生橋](#原生橋)
+  * [可選外部工具](#可選外部工具)
 - [主要外部工具](#主要外部工具)
 - [應用簽章與金鑰工具](#應用簽章與金鑰工具)
 - [產生單一可執行檔](#產生單一可執行檔)
