@@ -525,6 +525,12 @@ the front keeps running exactly as it was. Switch from the volume menu's last
 entry, which switches on the tap itself rather than asking which one, or from
 Buninu with `showWebView` below.
 
+### Web fullscreen
+
+The foreground WebView can present webpage/video fullscreen requests. Fullscreen hides the extra-keys bar and system bars. Back exits fullscreen first and restores the original UI and extra-keys visibility. Switching WebViews, navigating the owning page, or destroying the Activity also exits fullscreen. Orientation is not forced, and the existing file chooser remains available. Requests still depend on the website, WebView version, user interaction, and fullscreen permission for embedded frames.
+
+For manual verification, run `python3 -m http.server 8765 --bind 127.0.0.1 --directory tests` from the project directory, then open `http://127.0.0.1:8765/fullscreen.html` in the app. Check element fullscreen, video-control fullscreen, Back, WebView switching, and restoration when the extra-keys bar was already hidden.
+
 ### Back button
 
 The step where back really would leave the app (the console, with nothing left

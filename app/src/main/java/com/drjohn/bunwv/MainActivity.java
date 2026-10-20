@@ -221,6 +221,15 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private FrameLayout webContainer;
+    private FrameLayout activityRoot;
+    private View normalContent;
+    private FrameLayout fullscreenContainer;
+    private WebView fullscreenOwner;
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
+    private int savedSystemUiVisibility;
+    private int savedSystemBarsBehavior;
+    private boolean savedStatusBarVisible;
+    private boolean savedNavigationBarVisible;
     private final Map<Integer, WebView> webViews = new LinkedHashMap<>();
     // Read from the bridge's per-connection threads (currWebView), written on
     // the main thread; every other access to the registry itself stays on the
@@ -293,7 +302,11 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(extraKeysBar, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        setContentView(root);
+        normalContent = root;
+        activityRoot = new FrameLayout(this);
+        activityRoot.addView(root, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(activityRoot);
         applyWindowInsets(root);
         registerBackHandler();
 
@@ -322,6 +335,10 @@ public class MainActivity extends Activity {
         wv.getSettings().setLoadWithOverviewMode(true);
         wv.addJavascriptInterface(new SzJsBridge(this), "AndroidSz");
         wv.setWebViewClient(new WebViewClient() {
+            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (fullscreenOwner == view) hideWebFullscreen();
+            }
+
             @Override public void onPageFinished(WebView view, String url) {
                 view.evaluateJavascript(SZ_SAVE_TO_DISK_PATCH_JS, null);
                 // The viewport tag lives in the page, so a navigation resets
@@ -373,6 +390,15 @@ public class MainActivity extends Activity {
             }
         });
         wv.setWebChromeClient(new WebChromeClient() {
+            @Override public void onShowCustomView(View view, CustomViewCallback callback) {
+                showWebFullscreen(wv, view, callback);
+            }
+
+            @Override public void onHideCustomView() {
+                // A background WebView must not dismiss another WebView's content.
+                if (fullscreenOwner == wv) hideWebFullscreen();
+            }
+
             // jsgotty's browser client uses a real <input type="file"> for rz
             // uploads; without a WebChromeClient the tap on it does nothing
             // at all (no picker, no error) because there's no host to route
@@ -405,6 +431,96 @@ public class MainActivity extends Activity {
         return wv;
     }
 
+    private void showWebFullscreen(WebView owner, View content,
+                                   WebChromeClient.CustomViewCallback callback) {
+        if (owner != webView || fullscreenContainer != null || isFinishing()
+                || content.getParent() != null) {
+            callback.onCustomViewHidden();
+            return;
+        }
+        View decor = getWindow().getDecorView();
+        savedSystemUiVisibility = decor.getSystemUiVisibility();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsets insets = decor.getRootWindowInsets();
+            savedStatusBarVisible = insets != null
+                ? insets.isVisible(WindowInsets.Type.statusBars())
+                : (getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_FULLSCREEN) == 0;
+            savedNavigationBarVisible = insets == null || insets.isVisible(WindowInsets.Type.navigationBars());
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) savedSystemBarsBehavior = controller.getSystemBarsBehavior();
+        }
+        stopKeyRepeat();
+        clearKeyModifiers();
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(decor.getWindowToken(), 0);
+        fullscreenOwner = owner;
+        fullscreenCallback = callback;
+        fullscreenContainer = new FrameLayout(this);
+        fullscreenContainer.setBackgroundColor(Color.BLACK);
+        fullscreenContainer.addView(content, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // Keep both WebViews laid out, but hide their UI and extra keys beneath
+        // a separate overlay outside the normal content's system/IME padding.
+        normalContent.setVisibility(View.INVISIBLE);
+        activityRoot.addView(fullscreenContainer, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        content.requestFocus();
+        hideFullscreenSystemBars();
+    }
+
+    private void hideFullscreenSystemBars() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                controller.hide(WindowInsets.Type.systemBars());
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(savedSystemUiVisibility
+                | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        }
+    }
+
+    private void hideWebFullscreen() {
+        if (fullscreenContainer == null) return;
+        FrameLayout container = fullscreenContainer;
+        WebChromeClient.CustomViewCallback callback = fullscreenCallback;
+        // Clear ownership before calling back: WebView may re-enter onHideCustomView.
+        fullscreenContainer = null;
+        fullscreenCallback = null;
+        fullscreenOwner = null;
+        activityRoot.removeView(container);
+        container.removeAllViews();
+        normalContent.setVisibility(View.VISIBLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(savedSystemBarsBehavior);
+                int show = (savedStatusBarVisible ? WindowInsets.Type.statusBars() : 0)
+                    | (savedNavigationBarVisible ? WindowInsets.Type.navigationBars() : 0);
+                int hide = (savedStatusBarVisible ? 0 : WindowInsets.Type.statusBars())
+                    | (savedNavigationBarVisible ? 0 : WindowInsets.Type.navigationBars());
+                if (show != 0) controller.show(show);
+                if (hide != 0) controller.hide(hide);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(savedSystemUiVisibility);
+        }
+        normalContent.requestApplyInsets();
+        if (!isFinishing() && webView != null) webView.requestFocus();
+        if (callback != null) {
+            try { callback.onCustomViewHidden(); }
+            catch (RuntimeException e) { Log.w("WebFullscreen", "fullscreen exit callback failed", e); }
+        }
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && fullscreenContainer != null) hideFullscreenSystemBars();
+    }
+
     // -1 means "whichever WebView is in front right now" for every bridge
     // function that takes an id -- except showWebView, where switching to the
     // one already in front would be a no-op, so there it means "switch to the
@@ -424,6 +540,7 @@ public class MainActivity extends Activity {
         WebView view = webViews.get(Integer.valueOf(target));
         if (view == null) return -1;
         if (view != webView) {
+            hideWebFullscreen();
             if (webView != null) webView.setVisibility(View.INVISIBLE);
             view.setVisibility(View.VISIBLE);
             view.bringToFront();
@@ -1908,6 +2025,10 @@ public class MainActivity extends Activity {
     // buninu.backToConsole is false, which is how an app that wants back to
     // mean "leave" gets it.
     private boolean handleBack() {
+        if (fullscreenContainer != null) {
+            hideWebFullscreen();
+            return true;
+        }
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return true;
@@ -1994,6 +2115,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        hideWebFullscreen();
         super.onDestroy();
         // Unconditional, not only when isFinishing(): anything still bound or
         // running when this Activity goes away is what the *next* Activity in

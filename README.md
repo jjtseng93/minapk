@@ -399,6 +399,12 @@ ALT 按鈕的短按與長按各自獨立切換 Alt／Super：只開啟 Super 時
 
 App 裡有兩個 WebView，從啟動就都存在、不會被建立或關閉：`0` 是 console（Buninu 起的 jsgotty 終端機），`1` 是 app WebView，一開始是空白的、擺在後面。按鍵列、音量鍵選單、返回鍵一律作用在**當前在前景的那一個** WebView 上，所以切換 WebView 就等於同時把這三者換過去。在 app WebView 沒有上一頁可回時按返回鍵，會切回 console 而不是結束 App——沒有任何東西被關掉，離開前景的那個 WebView 照樣繼續跑（這個行為由 `buninu.backToConsole` 決定，預設 `true`，見 `--no-back-to-console`）。切換的方式是音量鍵選單最後那個「Switch WebView →」項目（按下去就直接切，不會再問你要哪一個），或從 Buninu 裡呼叫下面的 `showWebView`。
 
+### 網頁全螢幕
+
+支援前景 WebView 的網頁／影片全螢幕請求。進入後隱藏按鍵列與系統列，返回鍵會優先退出全螢幕，恢復原介面及按鍵列顯示狀態；切換 WebView、頁面導航或 Activity 結束時也會退出。不強制切換橫向，不影響原有檔案選擇器。是否能發起請求仍取決於網站、WebView 版本及使用者操作；iframe 也需網站允許全螢幕。
+
+手動驗證頁在 `tests/fullscreen.html`。可於專案目錄執行 `python3 -m http.server 8765 --bind 127.0.0.1 --directory tests`，再用 App 開啟 `http://127.0.0.1:8765/fullscreen.html`。分別確認網頁全螢幕、影片控制列全螢幕、返回鍵、切換 WebView，以及原先隱藏的按鍵列退出後仍保持隱藏。
+
 ### 返回鍵
 
 返回鍵真的會離開 App 的那一步（console 也沒有上一頁可回時）會先跳出確認對話框。確認離開之後不只是關掉畫面：Buninu 行程、native bridge 的 socket 都會收掉，整個 App 行程結束，下次開啟是全新的一份。Buninu 是用 `bun --no-orphans` 啟動的，所以它自己 spawn 出去的 jsgotty、shell 也會跟著一起結束，不會留下孤兒行程；同一個旗標也讓 Buninu 在 App 行程被系統殺掉時自行退出。
