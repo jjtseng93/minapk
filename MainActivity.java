@@ -2251,15 +2251,24 @@ public class MainActivity extends Activity {
     }
 
     private boolean focusWebView() {
+        return focusWebView(false);
+    }
+
+    private boolean focusWebView(boolean showKeyboard) {
         if (webView == null) return false;
-        webView.requestFocus();
-        webView.post(new Runnable() {
-            @Override public void run() {
-                webView.requestFocus();
-                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (imm != null) imm.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT);
-            }
-        });
+        final WebView target = webView;
+        target.requestFocus();
+        // Extra-key buttons only need native key delivery, not an IME request.
+        // Reopen the IME only when handing typed text back from imeReceiver.
+        if (showKeyboard) {
+            target.post(new Runnable() {
+                @Override public void run() {
+                    if (webView != target || !target.hasFocus()) return;
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if (imm != null) imm.showSoftInput(target, InputMethodManager.SHOW_IMPLICIT);
+                }
+            });
+        }
         return true;
     }
 
@@ -2347,7 +2356,7 @@ public class MainActivity extends Activity {
         imeReceiver.setText("");
         keyModifiers.clear();
         updateModifierButtonStyles();
-        sendWebTextKeys(text, modifiers);
+        if (sendWebTextKeys(text, modifiers)) focusWebView(true);
     }
 
     /**
@@ -2393,8 +2402,8 @@ public class MainActivity extends Activity {
         for (int i = modifierCodes.size() - 1; i >= 0; i--) {
             webView.dispatchKeyEvent(makeKeyEvent(KeyEvent.ACTION_UP, modifierCodes.get(i), meta, downTime));
         }
-        // The IME receiver may hold input focus while capturing a chord; give
-        // focus straight back to the WebView and keep the soft keyboard up.
+        // Return focus without requesting the soft keyboard. IME text commits
+        // explicitly keep it open in sendImeText; extra keys do not summon it.
         focusWebView();
         return true;
     }

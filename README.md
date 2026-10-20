@@ -391,6 +391,8 @@ CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按�
 
 ALT 按鈕的短按與長按各自獨立切換 Alt／Super：只開啟 Super 時顯示 `SUP`，兩者都開啟時顯示 `SUA`，有啟用修飾鍵時會反白。可再搭配 CTRL／SHFT，等待下一個按鍵送出後一起清除並恢復 `ALT`。例如長按、短按，再按 M，便會送出 Alt+Super+M。Super 透過原生 Android Meta 按鍵事件送給 WebView；部分 WebView 會遺失網頁事件的 `metaKey`，需由 jsgotty 等接收端補償，終端機內的程式也需支援相應鍵盤編碼。
 
+Ent、TAB、PGU／PGD、方向鍵等送鍵按鈕只把焦點交回 WebView 並送出按鍵，不主動叫出螢幕鍵盤，也不強制收起已開啟的鍵盤。修飾鍵仍會叫出輸入法以等待字母輸入。
+
 ### 音量鍵上選單
 
 實體**音量鍵 +** 會攔截下來（不會真的調音量），改成跳出一個小選單：切換螢幕按鍵列、在 WebView 裡 eval JS、選取終端機文字、上一頁／下一頁、跳到指定網址、縮放、Eruda console、背景權限設定、切換 WebView（直接切到下一個，不再多一層選單；項目本身會標出要切去哪一個，例如 `Switch WebView → 1: app`）。

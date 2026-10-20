@@ -502,6 +502,8 @@ Android Meta key events; some WebViews lose the DOM event's `metaKey`, requiring
 compensation in receivers such as jsgotty. Applications inside a terminal also
 need support for the corresponding keyboard encoding.
 
+Extra-key buttons such as Ent, TAB, PGU/PGD and arrows return focus and send keys to WebView without explicitly opening the soft keyboard or forcing an already open keyboard closed. Modifier buttons still open the IME to await a letter.
+
 ### Volume Up menu
 
 The physical **Volume Up** button is intercepted (it never actually changes
