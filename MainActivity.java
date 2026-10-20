@@ -2110,7 +2110,10 @@ public class MainActivity extends Activity {
 
     private void updateModifierButtonStyles() {
         styleModifierButton(ctrlButton, keyModifiers.contains("CTRL"));
-        styleModifierButton(altButton, keyModifiers.contains("ALT"));
+        boolean superSelected = keyModifiers.contains("META");
+        boolean altSelected = keyModifiers.contains("ALT");
+        altButton.setText(superSelected ? (altSelected ? "SUA" : "SUP") : "ALT");
+        styleModifierButton(altButton, altSelected || superSelected);
         styleModifierButton(shiftButton, keyModifiers.contains("SHIFT"));
         imeReceiver.setHintTextColor(keyModifiers.isEmpty() ? 0x8affffff : 0xffffc107);
     }
@@ -2252,6 +2255,10 @@ public class MainActivity extends Activity {
         if (containsIgnoreCase(modifiers, "SHIFT")) {
             modifierCodes.add(KeyEvent.KEYCODE_SHIFT_LEFT);
             meta |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
+        }
+        if (containsIgnoreCase(modifiers, "META")) {
+            modifierCodes.add(KeyEvent.KEYCODE_META_LEFT);
+            meta |= KeyEvent.META_META_ON | KeyEvent.META_META_LEFT_ON;
         }
         meta = KeyEvent.normalizeMetaState(meta);
 
@@ -2420,7 +2427,8 @@ public class MainActivity extends Activity {
 
     private FrameLayout buildExtraKeysBar() {
         ctrlButton = makeModifierButton("CTRL", "CTRL");
-        altButton = makeModifierButton("ALT", "ALT");
+        altButton = makeModifierButton("ALT", "ALT",
+            new Runnable() { @Override public void run() { toggleKeyModifier("META"); } });
         shiftButton = makeModifierButton("SHFT", "SHIFT",
             new Runnable() { @Override public void run() { sendNativeKey(KeyEvent.KEYCODE_D, CTRL_MODIFIER); } });
 

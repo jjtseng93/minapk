@@ -384,9 +384,12 @@ bun no_backup/bin/init.js --export buninu.tgz
 | PGD | Page Down | 按住持續向下捲動（滑鼠滾輪） |
 | ↑ ↓ ← → | 方向鍵 | 按住連續輸入 |
 | Ent | Enter | Forward Delete |
-| CTRL / ALT | 切換 Ctrl / Alt 修飾鍵 | （無） |
+| CTRL | 切換 Ctrl 修飾鍵 | （無） |
+| ALT | 切換 Alt 修飾鍵 | 切換 Super（Meta）修飾鍵 |
 
 CTRL、ALT、SHFT 是 Termux 風格的一次性（one-shot）修飾鍵：短按後按鈕會反白表示已啟用，套用到下一個按下的按鍵之後就會自動清除，所以要打 Ctrl+C 只要先點 CTRL 再點 `^C x`（或任何字母鍵），不需要多點觸控同時按住兩個鍵。畫面右上角還有一個很窄的隱形輸入框，可以喚出系統輸入法直接打字/貼上文字。
+
+ALT 按鈕的短按與長按各自獨立切換 Alt／Super：只開啟 Super 時顯示 `SUP`，兩者都開啟時顯示 `SUA`，有啟用修飾鍵時會反白。可再搭配 CTRL／SHFT，等待下一個按鍵送出後一起清除並恢復 `ALT`。例如長按、短按，再按 M，便會送出 Alt+Super+M。Super 透過原生 Android Meta 按鍵事件送給 WebView；部分 WebView 會遺失網頁事件的 `metaKey`，需由 jsgotty 等接收端補償，終端機內的程式也需支援相應鍵盤編碼。
 
 ### 音量鍵上選單
 

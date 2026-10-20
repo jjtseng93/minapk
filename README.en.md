@@ -483,7 +483,8 @@ and a long press often do different things:
 | PGD | Page Down | Hold to scroll down continuously (mouse wheel) |
 | ↑ ↓ ← → | Arrow keys | Hold for auto-repeat |
 | Ent | Enter | Forward Delete |
-| CTRL / ALT | Toggle the Ctrl / Alt modifier | (none) |
+| CTRL | Toggle the Ctrl modifier | (none) |
+| ALT | Toggle the Alt modifier | Toggle the Super (Meta) modifier |
 
 CTRL, ALT, and SHFT are Termux-style one-shot modifiers: a short tap
 highlights the button to show it's armed, and it's automatically cleared once
@@ -491,6 +492,15 @@ applied to the next key you press -- so typing Ctrl+C is just tap CTRL, then
 tap `^C x` (or any letter key), no need to hold two keys down with multi-touch.
 There's also a very narrow, near-invisible text field in the top-right corner
 that brings up the system IME to type or paste text directly.
+
+Short-tap ALT to independently toggle Alt, or long-press to toggle Super.
+The button reads `SUP` for Super alone, or `SUA` when both are armed, and
+highlights when either is active. CTRL/SHFT can be added too. All armed modifiers
+clear after the next key is sent, and the label returns to `ALT`. For example,
+long-press, short-tap, then M sends Alt+Super+M. Super is delivered as native
+Android Meta key events; some WebViews lose the DOM event's `metaKey`, requiring
+compensation in receivers such as jsgotty. Applications inside a terminal also
+need support for the corresponding keyboard encoding.
 
 ### Volume Up menu
 
