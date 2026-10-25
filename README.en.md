@@ -502,6 +502,13 @@ Android Meta key events; some WebViews lose the DOM event's `metaKey`, requiring
 compensation in receivers such as jsgotty. Applications inside a terminal also
 need support for the corresponding keyboard encoding.
 
+Holding PGU/PGD sends repeated mouse-wheel events until released; a short press still sends Page Up/Page Down. To use it:
+
+- Touch the page region you want to scroll, then hold PGU (up) or PGD (down). Wheel events target that WebView's last in-bounds single-touch position. Pressing the key bar does not overwrite it; the center is used only before any valid touch.
+- For horizontal scrolling, touch a horizontally scrollable region, tap SHFT, then hold PGU/PGD. This sends Shift+wheel; the receiving application decides whether to turn it into horizontal scrolling. GPUI's scrollable example supports this behavior.
+- CTRL, ALT, SHFT and Super can be combined for the entire hold. Their armed button state clears when repetition starts, but every wheel event keeps the captured modifiers; arm them again for the next hold. Terminal mouse protocols can only represent Shift/Alt/Ctrl, so Super is not guaranteed to survive terminal forwarding.
+- Each WebView remembers its own position. After rotation, showing the IME or resizing, coordinates are clamped to the current WebView bounds before dispatch. The remembered target is a screen position, not a page element; touch again to retarget after scrolling or layout changes.
+
 Extra-key buttons such as Ent, TAB, PGU/PGD and arrows return focus and send keys to WebView without explicitly opening the soft keyboard or forcing an already open keyboard closed. Modifier buttons still open the IME to await a letter.
 
 ### Volume Up menu

@@ -163,6 +163,10 @@ public class MainActivity extends Activity {
     // navigation -- for the other.
     private final Map<WebView, Integer> webViewZoom = new HashMap<>();
 
+    // WebView-local screen pixels, independent of DOM scrolling and viewport zoom.
+    // Each view keeps its own target; extra-key button touches never update it.
+    private final Map<WebView, PointF> webViewTouchPoints = new HashMap<>();
+
     // 100% restores the page's own original viewport tag verbatim (removing
     // the tag entirely if it never had one) rather than writing out
     // width=<baseline>. A computed width is only an approximation of the
@@ -319,6 +323,23 @@ public class MainActivity extends Activity {
     // uploads. Main thread only.
     private WebView createWebView(int id) {
         final WebView wv = new WebView(this);
+        wv.setOnTouchListener(new View.OnTouchListener() {
+            @Override public boolean onTouch(View view, MotionEvent event) {
+                int action = event.getActionMasked();
+                // Ignore pinch/multitouch and cancellation, and retain the last
+                // in-bounds point if a drag moves outside the WebView.
+                if (event.getPointerCount() == 1 && (action == MotionEvent.ACTION_DOWN
+                        || action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_UP)) {
+                    float x = event.getX(), y = event.getY();
+                    if (x >= 0 && y >= 0 && x < view.getWidth() && y < view.getHeight()) {
+                        PointF point = webViewTouchPoints.get(wv);
+                        if (point == null) webViewTouchPoints.put(wv, new PointF(x, y));
+                        else point.set(x, y);
+                    }
+                }
+                return false; // Observe only: WebView still handles taps, drags and pinch zoom.
+            }
+        });
         wv.getSettings().setJavaScriptEnabled(true);
         wv.getSettings().setDomStorageEnabled(true);
         // Pinch-to-zoom, independent of the menu's own viewport-width zoom.
@@ -2336,8 +2357,13 @@ public class MainActivity extends Activity {
 
         MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
         coords[0] = new MotionEvent.PointerCoords();
-        coords[0].x = webView.getWidth() / 2f;
-        coords[0].y = webView.getHeight() / 2f;
+        PointF point = webViewTouchPoints.get(webView);
+        // Rotation, split-screen or the IME may shrink the view after the touch.
+        // Clamp at dispatch time; never send a coordinate outside its current bounds.
+        coords[0].x = Math.max(0f, Math.min(webView.getWidth() - 1f,
+            point == null ? webView.getWidth() / 2f : point.x));
+        coords[0].y = Math.max(0f, Math.min(webView.getHeight() - 1f,
+            point == null ? webView.getHeight() / 2f : point.y));
         coords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, vscroll);
 
         long now = SystemClock.uptimeMillis();
