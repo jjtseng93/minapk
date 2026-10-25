@@ -362,12 +362,11 @@ public class MainActivity extends Activity {
                 // unresolvable app-chooser prompt.
                 if ("about:blank#blocked".equals(url)) return true;
 
-                // A server-side redirect fires this callback again for the
-                // redirected-to URL. We already diverted the original tap to an
-                // external app below, so only act on the first (non-redirect)
-                // call -- otherwise the same tap launches a second app-chooser
-                // for the redirect target.
-                if (request.isRedirect()) return true;
+                // Redirects belong to a navigation already running in this WebView,
+                // including loadUrl() from Go to URL. Let it continue internally;
+                // returning true cancels it (e.g. a server adding a trailing slash).
+                // Do not send redirect targets through the external-app chooser.
+                if (request.isRedirect()) return false;
 
                 // xterm.js (bundled in jsgotty) runs two independent link
                 // detectors -- WebLinksAddon (regex over plain text) and
