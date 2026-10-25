@@ -2302,10 +2302,20 @@ public class MainActivity extends Activity {
     // only ever cancels whatever runnable is currently armed.
     private void startScrollRepeat(final float vscroll) {
         stopKeyRepeat();
-        dispatchScroll(vscroll);
+        // Snapshot one-shot modifiers for the entire held gesture, like keys.
+        final List<String> modifiers = new ArrayList<>(keyModifiers);
+        keyModifiers.clear();
+        updateModifierButtonStyles();
+        int meta = 0;
+        if (containsIgnoreCase(modifiers, "CTRL")) meta |= KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+        if (containsIgnoreCase(modifiers, "ALT")) meta |= KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON;
+        if (containsIgnoreCase(modifiers, "SHIFT")) meta |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
+        if (containsIgnoreCase(modifiers, "META")) meta |= KeyEvent.META_META_ON | KeyEvent.META_META_LEFT_ON;
+        final int metaState = KeyEvent.normalizeMetaState(meta);
+        dispatchScroll(vscroll, metaState);
         keyRepeatRunnable = new Runnable() {
             @Override public void run() {
-                dispatchScroll(vscroll);
+                dispatchScroll(vscroll, metaState);
                 keyRepeatHandler.postDelayed(this, KEY_REPEAT_MS);
             }
         };
@@ -2317,7 +2327,7 @@ public class MainActivity extends Activity {
     // anything else that only listens for wheel, not PageUp/PageDown) scroll
     // its own buffer. Positive vscroll scrolls up (reveals earlier content),
     // matching AXIS_VSCROLL's convention (and RecyclerView's use of it).
-    private void dispatchScroll(float vscroll) {
+    private void dispatchScroll(float vscroll, int metaState) {
         if (webView == null || webView.getWidth() == 0 || webView.getHeight() == 0) return;
 
         MotionEvent.PointerProperties[] props = new MotionEvent.PointerProperties[1];
@@ -2334,7 +2344,7 @@ public class MainActivity extends Activity {
         long now = SystemClock.uptimeMillis();
         MotionEvent event = MotionEvent.obtain(
             now, now, MotionEvent.ACTION_SCROLL, 1, props, coords,
-            0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
+            metaState, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
         webView.dispatchGenericMotionEvent(event);
         event.recycle();
     }
